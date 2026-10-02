@@ -95,6 +95,17 @@ export const CADViewer: React.FC<CADViewerProps> = ({
   const raycasterRef = useRef<THREE.Raycaster>(new THREE.Raycaster());
   const mouseRef = useRef<THREE.Vector2>(new THREE.Vector2());
 
+  // Camera animation interpolation state
+  const cameraAnimRef = useRef<{
+    active: boolean;
+    startPos: THREE.Vector3;
+    endPos: THREE.Vector3;
+    startTarget: THREE.Vector3;
+    endTarget: THREE.Vector3;
+    progress: number;
+    duration: number; // in frames
+  } | null>(null);
+
   // -------------------------------------------------------------
   // INITIALIZE THREE.JS ENGINE
   // -------------------------------------------------------------
@@ -209,6 +220,23 @@ export const CADViewer: React.FC<CADViewerProps> = ({
     const animate = () => {
       animId = requestAnimationFrame(animate);
 
+      // Handle smooth camera interpolation
+      if (cameraAnimRef.current && cameraAnimRef.current.active) {
+        const anim = cameraAnimRef.current;
+        anim.progress += 1 / anim.duration;
+
+        // Smooth cubic ease out
+        const t = Math.min(anim.progress, 1);
+        const ease = 1 - Math.pow(1 - t, 3);
+
+        camera.position.lerpVectors(anim.startPos, anim.endPos, ease);
+        controls.target.lerpVectors(anim.startTarget, anim.endTarget, ease);
+
+        if (t >= 1) {
+          anim.active = false;
+        }
+      }
+
       controls.update();
 
       // Auto rotation: Rotates pivotGroup around its exact origin (which is the model center!)
@@ -263,10 +291,21 @@ export const CADViewer: React.FC<CADViewerProps> = ({
   const computeAndApplyBounds = useCallback(() => {
     if (parts.length === 0) return;
 
+    // Ensure world matrices are fully computed
+    modelRootRef.current.updateMatrixWorld(true);
+
     const box = new THREE.Box3();
     parts.forEach((p) => {
-      if (p.visible) {
-        box.expandByObject(p.mesh);
+      if (p.visible && p.mesh) {
+        // Compute precise bounding box from geometry
+        p.mesh.geometry.computeBoundingBox();
+        const partBox = p.mesh.geometry.boundingBox;
+        if (partBox) {
+          const cloneBox = partBox.clone().applyMatrix4(p.mesh.matrix);
+          box.union(cloneBox);
+        } else {
+          box.expandByObject(p.mesh);
+        }
       }
     });
 
@@ -288,12 +327,23 @@ export const CADViewer: React.FC<CADViewerProps> = ({
       modelRootRef.current.position.set(0, 0, 0);
     }
 
-    // Adjust grid to be just below the bottom of the model
-    if (gridHelperRef.current) {
+    // Adaptive grid sizing: dynamically size grid according to model dimensions
+    const maxDim = Math.max(size.x, size.y, size.z, 0.001);
+    if (sceneRef.current && gridHelperRef.current) {
+      sceneRef.current.remove(gridHelperRef.current);
+      gridHelperRef.current.geometry.dispose();
+
+      // Determine clean power-of-10 grid size
+      const gridSize = Math.max(maxDim * 3, 10);
+      const divisions = 40;
+      const newGrid = new THREE.GridHelper(gridSize, divisions, 0x38bdf8, 0x1e293b);
       const bottomY = pivotMode === 'center' ? -size.y / 2 : box.min.y;
-      gridHelperRef.current.position.y = bottomY - 0.5;
+      newGrid.position.y = bottomY - Math.max(maxDim * 0.005, 0.001);
+      newGrid.visible = showGrid;
+      sceneRef.current.add(newGrid);
+      gridHelperRef.current = newGrid;
     }
-  }, [parts, pivotMode]);
+  }, [parts, pivotMode, showGrid]);
 
   // When parts change, populate modelRoot
   useEffect(() => {
@@ -309,7 +359,7 @@ export const CADViewer: React.FC<CADViewerProps> = ({
     });
 
     computeAndApplyBounds();
-    fitCamera();
+    fitCamera(false);
   }, [parts, computeAndApplyBounds]);
 
   // Update pivot mode (center vs origin)
@@ -467,43 +517,117 @@ export const CADViewer: React.FC<CADViewerProps> = ({
   // -------------------------------------------------------------
   // CAMERA VIEW & CENTERING METHODS
   // -------------------------------------------------------------
-  const fitCamera = useCallback(() => {
-    if (!cameraRef.current || !controlsRef.current) return;
+  /**
+   * Calculates the exact geometric distance required to fit the model
+   * perfectly in the viewport based on camera FOV and aspect ratio.
+   */
+  const calculateFitDistance = useCallback((): number => {
+    if (!cameraRef.current) return 100;
+    const camera = cameraRef.current;
     const size = boundsSizeRef.current;
-    const maxDim = Math.max(size.x, size.y, size.z, 20);
-    const dist = maxDim * 1.8;
 
-    // Since pivotGroup is centered, target is (0, 0, 0)
-    controlsRef.current.target.set(0, 0, 0);
-    cameraRef.current.position.set(dist, dist * 0.7, dist);
-    cameraRef.current.lookAt(0, 0, 0);
-    controlsRef.current.update();
+    // Bounding sphere radius of the model (half diagonal)
+    const radius = Math.max(size.length() / 2, 0.0001);
 
-    setHasCustomPivot(false);
-    if (onCustomPivotChanged) onCustomPivotChanged(false);
-    if (pivotMarkerRef.current) pivotMarkerRef.current.visible = false;
-  }, [onCustomPivotChanged]);
+    // Half FOVs in radians
+    const vFov = (camera.fov * Math.PI) / 360;
+    const hFov = Math.atan(Math.tan(vFov) * camera.aspect);
+
+    // Precise distances to fit vertically and horizontally
+    const distV = radius / Math.sin(vFov);
+    const distH = radius / Math.sin(hFov);
+
+    // 1.2x breathing room so it occupies ~80% of screen height/width
+    const optimalDist = Math.max(distV, distH) * 1.2;
+
+    // Calibrate camera near/far and controls zoom limits to model scale
+    camera.near = Math.max(radius / 1000, 0.0001);
+    camera.far = Math.max(radius * 100, 2000);
+    camera.updateProjectionMatrix();
+
+    if (controlsRef.current) {
+      controlsRef.current.minDistance = Math.max(radius / 200, 0.0001);
+      controlsRef.current.maxDistance = Math.max(radius * 30, 1000);
+    }
+
+    return optimalDist;
+  }, []);
+
+  const fitCamera = useCallback(
+    (animate = true) => {
+      if (!cameraRef.current || !controlsRef.current) return;
+      const camera = cameraRef.current;
+      const controls = controlsRef.current;
+
+      const optimalDist = calculateFitDistance();
+
+      // Standard isometric orientation vector
+      const dir = new THREE.Vector3(1, 0.8, 1).normalize();
+      const targetPos = dir.multiplyScalar(optimalDist);
+      const targetLookAt = new THREE.Vector3(0, 0, 0);
+
+      if (animate) {
+        cameraAnimRef.current = {
+          active: true,
+          startPos: camera.position.clone(),
+          endPos: targetPos,
+          startTarget: controls.target.clone(),
+          endTarget: targetLookAt,
+          progress: 0,
+          duration: 20, // 20 frames (~330ms)
+        };
+      } else {
+        controls.target.copy(targetLookAt);
+        camera.position.copy(targetPos);
+        camera.lookAt(targetLookAt);
+        controls.update();
+      }
+
+      setHasCustomPivot(false);
+      if (onCustomPivotChanged) onCustomPivotChanged(false);
+      if (pivotMarkerRef.current) pivotMarkerRef.current.visible = false;
+    },
+    [calculateFitDistance, onCustomPivotChanged]
+  );
 
   const setCameraView = useCallback(
     (view: CameraView) => {
       if (!cameraRef.current || !controlsRef.current) return;
-      const size = boundsSizeRef.current;
-      const maxDim = Math.max(size.x, size.y, size.z, 20);
-      const dist = maxDim * 2.2;
-      const t = controlsRef.current.target.clone();
+      const camera = cameraRef.current;
+      const controls = controlsRef.current;
 
-      if (view === 'front') cameraRef.current.position.set(t.x, t.y, t.z + dist);
-      else if (view === 'back') cameraRef.current.position.set(t.x, t.y, t.z - dist);
-      else if (view === 'top') cameraRef.current.position.set(t.x, t.y + dist, t.z + 0.001);
-      else if (view === 'bottom') cameraRef.current.position.set(t.x, t.y - dist, t.z + 0.001);
-      else if (view === 'right') cameraRef.current.position.set(t.x + dist, t.y, t.z);
-      else if (view === 'left') cameraRef.current.position.set(t.x - dist, t.y, t.z);
-      else if (view === 'iso') cameraRef.current.position.set(t.x + dist * 0.7, t.y + dist * 0.7, t.z + dist * 0.7);
+      const optimalDist = calculateFitDistance();
+      const targetCenter = controls.target.clone();
 
-      cameraRef.current.lookAt(t);
-      controlsRef.current.update();
+      let targetPos = new THREE.Vector3();
+      if (view === 'front') {
+        targetPos.set(targetCenter.x, targetCenter.y, targetCenter.z + optimalDist);
+      } else if (view === 'back') {
+        targetPos.set(targetCenter.x, targetCenter.y, targetCenter.z - optimalDist);
+      } else if (view === 'top') {
+        targetPos.set(targetCenter.x, targetCenter.y + optimalDist, targetCenter.z + 0.0001);
+      } else if (view === 'bottom') {
+        targetPos.set(targetCenter.x, targetCenter.y - optimalDist, targetCenter.z + 0.0001);
+      } else if (view === 'right') {
+        targetPos.set(targetCenter.x + optimalDist, targetCenter.y, targetCenter.z);
+      } else if (view === 'left') {
+        targetPos.set(targetCenter.x - optimalDist, targetCenter.y, targetCenter.z);
+      } else if (view === 'iso') {
+        const dir = new THREE.Vector3(1, 0.8, 1).normalize();
+        targetPos.copy(targetCenter).add(dir.multiplyScalar(optimalDist));
+      }
+
+      cameraAnimRef.current = {
+        active: true,
+        startPos: camera.position.clone(),
+        endPos: targetPos,
+        startTarget: targetCenter.clone(),
+        endTarget: targetCenter,
+        progress: 0,
+        duration: 20,
+      };
     },
-    []
+    [calculateFitDistance]
   );
 
   const resetPivot = useCallback(() => {

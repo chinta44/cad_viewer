@@ -199,6 +199,9 @@ export default function App() {
           updateMetadataFromParts(built, file.name, format, file.size);
           setLastDeletedPart(null);
           showToast(`"${file.name}" (${built.length}パーツ) を読み込みました`);
+          setTimeout(() => {
+            resetCameraRef.current?.();
+          }, 60);
         }
 
         // Reset tools
@@ -239,6 +242,9 @@ export default function App() {
     setExplodeFactor(0);
     setClipAxis('off');
     if (clearMeasureRef.current) clearMeasureRef.current();
+    setTimeout(() => {
+      resetCameraRef.current?.();
+    }, 60);
   };
 
   // -------------------------------------------------------------

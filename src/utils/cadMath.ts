@@ -39,6 +39,12 @@ export function computeGeometryVolume(geometry: THREE.BufferGeometry): number {
 
 export function formatMm(val: number): string {
   if (isNaN(val)) return '0.00';
+  if (Math.abs(val) > 0 && Math.abs(val) < 0.05) {
+    return val.toFixed(4);
+  }
+  if (Math.abs(val) > 0 && Math.abs(val) < 1.0) {
+    return val.toFixed(3);
+  }
   return val.toFixed(2);
 }
 
