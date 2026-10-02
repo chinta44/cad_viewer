@@ -1,0 +1,6 @@
+{
+  "name": "CADStudio 3D Viewer",
+  "description": "Professional 3D CAD & Mesh Viewer supporting GLB, STEP, STL, 3MF, OBJ, and ZIP with centered rotation pivot, section clipping, measurement, and precision inspection.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
