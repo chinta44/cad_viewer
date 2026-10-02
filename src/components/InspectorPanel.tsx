@@ -527,6 +527,14 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
           </div>
         )}
       </div>
+
+      {/* Panel Footer: Version info */}
+      <div className="px-3 py-2 border-t border-slate-800/80 bg-slate-950/80 flex items-center justify-between text-[10px] text-slate-400 font-mono shrink-0">
+        <span>CADStudio 3D Viewer</span>
+        <span className="text-sky-400 font-semibold bg-sky-500/10 px-1.5 py-0.5 rounded border border-sky-500/20">
+          v2.1.0
+        </span>
+      </div>
     </aside>
   );
 };

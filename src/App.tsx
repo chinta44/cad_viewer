@@ -10,7 +10,7 @@ import {
   ModelMetadata,
   MeasureResult
 } from './types/cad';
-import { computeGeometryVolume } from './utils/cadMath';
+import { computeGeometryVolume, formatMm } from './utils/cadMath';
 import { parseCADFile, generateSampleModel, RawPartData } from './utils/cadLoaders';
 import { CADViewer } from './components/CADViewer';
 import { TopBar } from './components/TopBar';
@@ -51,6 +51,7 @@ export default function App() {
   // Environment & Settings
   const [backgroundColor, setBackgroundColor] = useState<string>('#090d16');
   const [showGrid, setShowGrid] = useState<boolean>(true);
+  const [showDimensionsBox, setShowDimensionsBox] = useState<boolean>(true);
   const [selectedDensityId, setSelectedDensityId] = useState<string>('pla');
   const [customDensity, setCustomDensity] = useState<number>(1.24);
   const [pricePerKg, setPricePerKg] = useState<number>(3000);
@@ -198,7 +199,16 @@ export default function App() {
           setParts(built);
           updateMetadataFromParts(built, file.name, format, file.size);
           setLastDeletedPart(null);
-          showToast(`"${file.name}" (${built.length}パーツ) を読み込みました`);
+
+          // Calculate dimensions for toast
+          const overallBox = new THREE.Box3();
+          built.forEach((p) => overallBox.union(p.boundingBox));
+          const sz = new THREE.Vector3();
+          overallBox.getSize(sz);
+
+          showToast(
+            `"${file.name}" (${built.length}パーツ) 読み込み完了 [寸法: X ${formatMm(sz.x)} × Y ${formatMm(sz.y)} × Z ${formatMm(sz.z)} mm]`
+          );
           setTimeout(() => {
             resetCameraRef.current?.();
           }, 60);
@@ -426,6 +436,8 @@ export default function App() {
         pivotMode={pivotMode}
         backgroundColor={backgroundColor}
         showGrid={showGrid}
+        showDimensionsBox={showDimensionsBox}
+        onToggleDimensionsBox={() => setShowDimensionsBox((prev) => !prev)}
         onCameraUpdate={(cam) => {
           cameraRef.current = cam;
         }}

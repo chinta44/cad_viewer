@@ -37,14 +37,17 @@ export const TopBar: React.FC<TopBarProps> = ({
 }) => {
   return (
     <header className="fixed top-0 left-0 right-0 h-14 bg-slate-950/85 backdrop-blur-xl border-b border-slate-800/80 z-30 px-4 flex items-center justify-between gap-4 text-slate-100 select-none">
-      {/* Zone 1: Brand */}
+      {/* Zone 1: Brand & Version */}
       <div className="flex items-center gap-3 shrink-0">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-sky-400 to-blue-600 flex items-center justify-center text-white shadow-lg shadow-sky-500/20">
             <Box className="w-4 h-4" />
           </div>
-          <span className="text-base font-bold tracking-tight text-white">
+          <span className="text-base font-bold tracking-tight text-white flex items-baseline gap-1.5">
             CADStudio 3D
+            <span className="text-[11px] font-mono font-medium text-sky-400/90 tracking-normal">
+              v2.1.0
+            </span>
           </span>
         </div>
       </div>

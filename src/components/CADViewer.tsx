@@ -10,6 +10,8 @@ import {
   PivotMode,
   MeasureResult
 } from '../types/cad';
+import { formatMm } from '../utils/cadMath';
+import { Box, Ruler, CheckCircle2, Crosshair, Sparkles } from 'lucide-react';
 
 interface CADViewerProps {
   parts: CADPart[];
@@ -26,6 +28,8 @@ interface CADViewerProps {
   pivotMode: PivotMode;
   backgroundColor: string;
   showGrid: boolean;
+  showDimensionsBox?: boolean;
+  onToggleDimensionsBox?: () => void;
   onCameraUpdate?: (camera: THREE.Camera) => void;
   onSetCameraViewRef?: (setViewFn: (view: CameraView) => void) => void;
   onResetCameraRef?: (resetFn: () => void) => void;
@@ -51,6 +55,8 @@ export const CADViewer: React.FC<CADViewerProps> = ({
   pivotMode,
   backgroundColor,
   showGrid,
+  showDimensionsBox = true,
+  onToggleDimensionsBox,
   onCameraUpdate,
   onSetCameraViewRef,
   onResetCameraRef,
@@ -69,16 +75,18 @@ export const CADViewer: React.FC<CADViewerProps> = ({
   const controlsRef = useRef<OrbitControls | null>(null);
   const gridHelperRef = useRef<THREE.GridHelper | null>(null);
 
-  // The hierarchy:
+  // Assembly hierarchy:
   // scene -> pivotGroup (always at target or 0,0,0) -> modelRoot (offset by -center in center mode)
   const pivotGroupRef = useRef<THREE.Group>(new THREE.Group());
   const modelRootRef = useRef<THREE.Group>(new THREE.Group());
+  const dimBoxGroupRef = useRef<THREE.Group>(new THREE.Group());
 
   // Measurement state
   const measurePointsRef = useRef<THREE.Vector3[]>([]);
   const measureObjectsRef = useRef<THREE.Object3D[]>([]);
   const [activeMeasure, setActiveMeasure] = useState<MeasureResult | null>(null);
   const [measureScreenPos, setMeasureScreenPos] = useState<{ x: number; y: number } | null>(null);
+  const [measureStep, setMeasureStep] = useState<number>(0); // 0: none, 1: 1st point picked, 2: complete
 
   // Pivot marker object (visual feedback when double clicking)
   const pivotMarkerRef = useRef<THREE.Object3D | null>(null);
@@ -175,9 +183,10 @@ export const CADViewer: React.FC<CADViewerProps> = ({
     scene.add(grid);
     gridHelperRef.current = grid;
 
-    // Assembly hierarchy: scene -> pivotGroup -> modelRoot
+    // Assembly hierarchy: scene -> pivotGroup -> modelRoot + dimBoxGroup
     scene.add(pivotGroupRef.current);
     pivotGroupRef.current.add(modelRootRef.current);
+    pivotGroupRef.current.add(dimBoxGroupRef.current);
 
     // Pivot visual marker
     const markerGroup = new THREE.Group();
@@ -343,7 +352,76 @@ export const CADViewer: React.FC<CADViewerProps> = ({
       sceneRef.current.add(newGrid);
       gridHelperRef.current = newGrid;
     }
-  }, [parts, pivotMode, showGrid]);
+
+    // Rebuild 3D Dimension Guide Box
+    const dimGroup = dimBoxGroupRef.current;
+    while (dimGroup.children.length > 0) {
+      const child = dimGroup.children[0] as any;
+      dimGroup.remove(child);
+      if (child.geometry) child.geometry.dispose();
+      if (child.material) child.material.dispose();
+    }
+
+    if (size.x > 0 && size.y > 0 && size.z > 0) {
+      // Outer bounding box wireframe
+      const boxGeo = new THREE.BoxGeometry(size.x, size.y, size.z);
+      const wireGeo = new THREE.WireframeGeometry(boxGeo);
+      const wireMat = new THREE.LineBasicMaterial({
+        color: 0x38bdf8,
+        transparent: true,
+        opacity: 0.25,
+      });
+      const boxWire = new THREE.LineSegments(wireGeo, wireMat);
+      dimGroup.add(boxWire);
+
+      // Coordinate edge lines (X: Red, Y: Green, Z: Blue)
+      const halfX = size.x / 2;
+      const halfY = size.y / 2;
+      const halfZ = size.z / 2;
+
+      // X dimension line at front bottom
+      const xLineGeo = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(-halfX, -halfY, halfZ),
+        new THREE.Vector3(halfX, -halfY, halfZ),
+      ]);
+      const xLine = new THREE.Line(
+        xLineGeo,
+        new THREE.LineBasicMaterial({ color: 0xf43f5e, linewidth: 2.5 })
+      );
+      dimGroup.add(xLine);
+
+      // Y dimension line at front left
+      const yLineGeo = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(-halfX, -halfY, halfZ),
+        new THREE.Vector3(-halfX, halfY, halfZ),
+      ]);
+      const yLine = new THREE.Line(
+        yLineGeo,
+        new THREE.LineBasicMaterial({ color: 0x10b981, linewidth: 2.5 })
+      );
+      dimGroup.add(yLine);
+
+      // Z dimension line at bottom left
+      const zLineGeo = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(-halfX, -halfY, -halfZ),
+        new THREE.Vector3(-halfX, -halfY, halfZ),
+      ]);
+      const zLine = new THREE.Line(
+        zLineGeo,
+        new THREE.LineBasicMaterial({ color: 0x38bdf8, linewidth: 2.5 })
+      );
+      dimGroup.add(zLine);
+    }
+
+    dimGroup.visible = showDimensionsBox;
+  }, [parts, pivotMode, showGrid, showDimensionsBox]);
+
+  // Sync dimension box visibility
+  useEffect(() => {
+    if (dimBoxGroupRef.current) {
+      dimBoxGroupRef.current.visible = showDimensionsBox;
+    }
+  }, [showDimensionsBox]);
 
   // When parts change, populate modelRoot
   useEffect(() => {
@@ -688,10 +766,13 @@ export const CADViewer: React.FC<CADViewerProps> = ({
       controlsRef.current.target.copy(hitPoint);
       controlsRef.current.update();
 
-      // Show pivot visual marker at clicked point
+      // Show pivot visual marker at clicked point scaled proportionally
       if (pivotMarkerRef.current) {
+        const modelSpan = Math.max(boundsSizeRef.current.length(), 0.01);
+        const markerScale = Math.max(modelSpan * 0.015, 0.0002);
         pivotMarkerRef.current.position.copy(hitPoint);
         pivotMarkerRef.current.quaternion.copy(cameraRef.current.quaternion);
+        pivotMarkerRef.current.scale.setScalar(markerScale);
         pivotMarkerRef.current.visible = true;
       }
 
@@ -721,17 +802,46 @@ export const CADViewer: React.FC<CADViewerProps> = ({
     if (isMeasuring && hits.length > 0) {
       const pt = hits[0].point.clone();
       const points = measurePointsRef.current;
+
+      // If already has 2 points, start fresh measurement on next click
+      if (points.length >= 2) {
+        clearMeasure();
+      }
+
       points.push(pt);
+      setMeasureStep(points.length);
+
+      // Scale pin proportionally to model dimensions (0.75% of model diagonal)
+      const modelSpan = Math.max(boundsSizeRef.current.length(), 0.01);
+      const pinRadius = Math.max(modelSpan * 0.0075, 0.0001);
 
       // Create pin dot
       const pin = new THREE.Mesh(
-        new THREE.SphereGeometry(1.2, 16, 16),
+        new THREE.SphereGeometry(pinRadius, 20, 20),
         new THREE.MeshBasicMaterial({ color: 0xef4444, depthTest: false })
       );
       pin.position.copy(pt);
       pin.renderOrder = 1000;
       sceneRef.current.add(pin);
       measureObjectsRef.current.push(pin);
+
+      // Create subtle halo ring for point 1
+      if (points.length === 1) {
+        const haloGeo = new THREE.RingGeometry(pinRadius * 1.6, pinRadius * 2.4, 32);
+        const haloMat = new THREE.MeshBasicMaterial({
+          color: 0xef4444,
+          side: THREE.DoubleSide,
+          depthTest: false,
+          transparent: true,
+          opacity: 0.7,
+        });
+        const halo = new THREE.Mesh(haloGeo, haloMat);
+        halo.position.copy(pt);
+        if (cameraRef.current) halo.quaternion.copy(cameraRef.current.quaternion);
+        halo.renderOrder = 1000;
+        sceneRef.current.add(halo);
+        measureObjectsRef.current.push(halo);
+      }
 
       if (points.length === 2) {
         // Draw measurement line
@@ -757,8 +867,6 @@ export const CADViewer: React.FC<CADViewerProps> = ({
         };
         setActiveMeasure(res);
         onMeasureComplete(res);
-      } else if (points.length > 2) {
-        clearMeasure();
       }
     } else if (!isMeasuring && hits.length > 0) {
       // Find which part was clicked
@@ -775,11 +883,15 @@ export const CADViewer: React.FC<CADViewerProps> = ({
   const clearMeasure = useCallback(() => {
     measurePointsRef.current = [];
     if (sceneRef.current) {
-      measureObjectsRef.current.forEach((obj) => sceneRef.current?.remove(obj));
+      measureObjectsRef.current.forEach((obj) => {
+        sceneRef.current?.remove(obj);
+        if ((obj as any).geometry) (obj as any).geometry.dispose();
+      });
     }
     measureObjectsRef.current = [];
     setActiveMeasure(null);
     setMeasureScreenPos(null);
+    setMeasureStep(0);
   }, []);
 
   useEffect(() => {
@@ -794,6 +906,85 @@ export const CADViewer: React.FC<CADViewerProps> = ({
       onDoubleClick={handleDoubleClick}
       className="absolute inset-0 w-full h-full cursor-grab active:cursor-grabbing overflow-hidden"
     >
+      {/* Floating XYZ Model Dimensions HUD (Top-Left) */}
+      {boundsSizeRef.current && parts.length > 0 && boundsSizeRef.current.length() > 0 && (
+        <div className="absolute top-16 left-4 z-20 pointer-events-auto flex items-center gap-2 select-none animate-in fade-in slide-in-from-top-2 duration-150">
+          <div className="bg-slate-900/90 backdrop-blur-xl border border-slate-700/80 rounded-xl px-3 py-2 shadow-2xl flex items-center gap-3 text-xs">
+            <div className="flex items-center gap-1.5 font-bold text-slate-200">
+              <Box className="w-3.5 h-3.5 text-sky-400" />
+              <span>外形サイズ</span>
+            </div>
+            <div className="h-3.5 w-px bg-slate-700/80" />
+            <div className="flex items-center gap-3 font-mono text-[11px] tabular-nums">
+              <span className="text-slate-300 flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-rose-500 inline-block" />
+                <span className="text-rose-400 font-bold">X:</span> {formatMm(boundsSizeRef.current.x)} mm
+              </span>
+              <span className="text-slate-300 flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
+                <span className="text-emerald-400 font-bold">Y:</span> {formatMm(boundsSizeRef.current.y)} mm
+              </span>
+              <span className="text-slate-300 flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-sky-500 inline-block" />
+                <span className="text-sky-400 font-bold">Z:</span> {formatMm(boundsSizeRef.current.z)} mm
+              </span>
+            </div>
+            {onToggleDimensionsBox && (
+              <>
+                <div className="h-3.5 w-px bg-slate-700/80" />
+                <button
+                  onClick={onToggleDimensionsBox}
+                  className={`px-2 py-0.5 rounded text-[10px] font-medium border transition-colors cursor-pointer ${
+                    showDimensionsBox
+                      ? 'bg-sky-500/20 text-sky-300 border-sky-500/50'
+                      : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
+                  }`}
+                  title="3D空間上に直方体寸法フレームを表示/非表示"
+                >
+                  3D枠 {showDimensionsBox ? 'ON' : 'OFF'}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Measurement Guidance Banner (Top-Center) */}
+      {isMeasuring && (
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-20 pointer-events-auto select-none animate-in fade-in slide-in-from-top-2 duration-150">
+          <div className="bg-slate-900/95 backdrop-blur-xl border border-rose-500/60 rounded-xl px-4 py-2 shadow-2xl flex items-center gap-3 text-xs text-slate-200">
+            <Ruler className="w-4 h-4 text-rose-400 shrink-0" />
+            <div className="flex items-center gap-2">
+              {measureStep === 0 && (
+                <span>
+                  モデル表面の<strong className="text-rose-400 font-bold underline decoration-rose-400 underline-offset-2">【1点目】</strong>をクリックしてください
+                </span>
+              )}
+              {measureStep === 1 && (
+                <span className="text-amber-300 flex items-center gap-1.5">
+                  <span className="inline-block w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+                  1点目選択中 — 距離を測る<strong className="text-white font-bold underline underline-offset-2">【2点目】</strong>をクリック
+                </span>
+              )}
+              {measureStep === 2 && activeMeasure && (
+                <span className="text-emerald-300 flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                  計測完了: <strong className="font-mono text-white text-sm">{activeMeasure.distance.toFixed(2)} mm</strong>
+                </span>
+              )}
+            </div>
+            {measureStep > 0 && (
+              <button
+                onClick={clearMeasure}
+                className="px-2 py-0.5 text-[10px] bg-rose-950/50 hover:bg-rose-900 text-rose-300 rounded border border-rose-800 transition-colors cursor-pointer"
+              >
+                やり直す
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* 3D Measurement Tooltip Overlay */}
       {activeMeasure && measureScreenPos && (
         <div
