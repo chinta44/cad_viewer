@@ -8,7 +8,10 @@ import {
   Compass,
   Spline,
   FlipHorizontal,
-  Target
+  Target,
+  Video,
+  Play,
+  ChevronUp
 } from 'lucide-react';
 import { ViewMode, MaterialPreset, ClipAxis, CameraView, PivotMode } from '../types/cad';
 
@@ -31,6 +34,9 @@ interface FloatingToolbarProps {
   hasMeasurePoints: boolean;
   autoRotate: boolean;
   onToggleAutoRotate: () => void;
+  rotationSpeed: number;
+  onSetRotationSpeed: (speed: number) => void;
+  onOpenVideoExport: () => void;
   onSetCameraView: (view: CameraView) => void;
   pivotMode: PivotMode;
   onResetPivot: () => void;
@@ -56,14 +62,17 @@ export const FloatingToolbar: React.FC<FloatingToolbarProps> = ({
   hasMeasurePoints,
   autoRotate,
   onToggleAutoRotate,
+  rotationSpeed,
+  onSetRotationSpeed,
+  onOpenVideoExport,
   onSetCameraView,
   pivotMode,
   onResetPivot,
   hasCustomPivot,
 }) => {
-  const [activeMenu, setActiveMenu] = useState<'view' | 'mode' | 'material' | 'clip' | 'explode' | null>(null);
+  const [activeMenu, setActiveMenu] = useState<'view' | 'mode' | 'material' | 'clip' | 'explode' | 'rotate' | null>(null);
 
-  const toggleMenu = (menu: 'view' | 'mode' | 'material' | 'clip' | 'explode') => {
+  const toggleMenu = (menu: 'view' | 'mode' | 'material' | 'clip' | 'explode' | 'rotate') => {
     setActiveMenu((prev) => (prev === menu ? null : menu));
   };
 
@@ -258,6 +267,67 @@ export const FloatingToolbar: React.FC<FloatingToolbarProps> = ({
               </div>
             </div>
           )}
+
+          {/* Rotate & Video Menu */}
+          {activeMenu === 'rotate' && (
+            <div className="w-[260px] space-y-3">
+              <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider flex items-center justify-between">
+                <span>自動回転・動画収録</span>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded font-mono ${autoRotate ? 'bg-sky-500/20 text-sky-300' : 'text-slate-500'}`}>
+                  {autoRotate ? '回転中' : '停止中'}
+                </span>
+              </div>
+
+              {/* Toggle switch */}
+              <div className="flex items-center justify-between bg-slate-950/50 p-2 rounded-xl border border-slate-800">
+                <span className="text-xs text-slate-300">中心軸自動回転</span>
+                <button
+                  onClick={onToggleAutoRotate}
+                  className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                    autoRotate ? 'bg-sky-500 text-white shadow-sm' : 'bg-slate-800 text-slate-400 hover:text-white'
+                  }`}
+                >
+                  {autoRotate ? 'ON' : 'OFF'}
+                </button>
+              </div>
+
+              {/* Speed selector */}
+              <div>
+                <span className="text-[10px] text-slate-400 block mb-1.5 font-medium">回転速度</span>
+                <div className="grid grid-cols-3 gap-1">
+                  {[
+                    { val: 0.5, label: '0.5x 低速' },
+                    { val: 1.0, label: '1.0x 標準' },
+                    { val: 2.0, label: '2.0x 高速' },
+                  ].map((s) => (
+                    <button
+                      key={s.val}
+                      onClick={() => onSetRotationSpeed(s.val)}
+                      className={`py-1 px-1.5 rounded-lg text-[11px] border text-center transition-colors cursor-pointer ${
+                        rotationSpeed === s.val
+                          ? 'bg-sky-500/20 text-sky-300 border-sky-500/60 font-bold'
+                          : 'bg-slate-950/40 border-slate-800 hover:bg-slate-800 text-slate-400'
+                      }`}
+                    >
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Video Record CTA */}
+              <button
+                onClick={() => {
+                  setActiveMenu(null);
+                  onOpenVideoExport();
+                }}
+                className="w-full py-2 px-3 bg-gradient-to-r from-rose-500 to-amber-500 hover:from-rose-400 hover:to-amber-400 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-rose-500/20 flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Video className="w-3.5 h-3.5" />
+                <span>360° 動画を保存 (MP4)</span>
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -359,17 +429,43 @@ export const FloatingToolbar: React.FC<FloatingToolbarProps> = ({
 
         <div className="h-4 w-px bg-slate-800 mx-0.5" />
 
-        {/* Auto rotate button */}
+        {/* Auto rotate button with settings flyout */}
+        <div className="flex items-center">
+          <button
+            onClick={onToggleAutoRotate}
+            className={`flex items-center gap-1 px-2.5 py-1.5 rounded-l-xl text-xs font-medium transition-colors cursor-pointer ${
+              autoRotate
+                ? 'bg-sky-500 text-white shadow-md shadow-sky-500/30'
+                : 'hover:bg-slate-800 text-slate-300'
+            }`}
+            title="中心軸でのターンテーブル自動回転 ON/OFF"
+          >
+            <RotateCw className={`w-4 h-4 ${autoRotate ? 'animate-spin' : ''}`} />
+            <span className="hidden md:inline">回転</span>
+          </button>
+          <button
+            onClick={() => toggleMenu('rotate')}
+            className={`px-1.5 py-1.5 rounded-r-xl border-l border-slate-700/60 text-xs transition-colors cursor-pointer ${
+              activeMenu === 'rotate'
+                ? 'bg-sky-600 text-white'
+                : autoRotate
+                ? 'bg-sky-500 text-white hover:bg-sky-600'
+                : 'hover:bg-slate-800 text-slate-400 hover:text-white'
+            }`}
+            title="回転速度設定 & 録画オプション"
+          >
+            <ChevronUp className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        {/* 360 Video Export Button */}
         <button
-          onClick={onToggleAutoRotate}
-          className={`p-1.5 rounded-xl transition-colors cursor-pointer ${
-            autoRotate
-              ? 'bg-sky-500 text-white shadow-md shadow-sky-500/30'
-              : 'hover:bg-slate-800 text-slate-300'
-          }`}
-          title="中心軸でのターンテーブル自動回転"
+          onClick={onOpenVideoExport}
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/35 hover:border-rose-500/60 transition-all cursor-pointer shadow-sm"
+          title="360° 自動回転動画を録画・保存 (MP4)"
         >
-          <RotateCw className={`w-4 h-4 ${autoRotate ? 'animate-spin' : ''}`} />
+          <Video className="w-4 h-4 text-rose-400" />
+          <span className="hidden sm:inline">動画(MP4)</span>
         </button>
 
         {/* Pivot reset button */}

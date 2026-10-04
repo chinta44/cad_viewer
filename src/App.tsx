@@ -18,6 +18,7 @@ import { FloatingToolbar } from './components/FloatingToolbar';
 import { InspectorPanel } from './components/InspectorPanel';
 import { OrientationGizmo } from './components/OrientationGizmo';
 import { SampleModelModal } from './components/SampleModelModal';
+import { VideoExportModal } from './components/VideoExportModal';
 import { UploadCloud, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 
 export default function App() {
@@ -33,8 +34,17 @@ export default function App() {
   const [viewMode, setViewMode] = useState<ViewMode>('solid');
   const [materialPreset, setMaterialPreset] = useState<MaterialPreset>('normal');
   const [autoRotate, setAutoRotate] = useState(false);
+  const [rotationSpeed, setRotationSpeed] = useState<number>(1.0);
   const [pivotMode, setPivotMode] = useState<PivotMode>('center');
   const [hasCustomPivot, setHasCustomPivot] = useState(false);
+
+  // 360 Video Export state
+  const [videoModalOpen, setVideoModalOpen] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingProgress, setRecordingProgress] = useState(0);
+  const [recordedVideoUrl, setRecordedVideoUrl] = useState<string | null>(null);
+  const [recordedFileSize, setRecordedFileSize] = useState<number | null>(null);
+  const [recordedFileName, setRecordedFileName] = useState<string>('cad_model_360.mp4');
 
   // Section clipping
   const [clipAxis, setClipAxis] = useState<ClipAxis>('off');
@@ -74,6 +84,14 @@ export default function App() {
   const resetPivotRef = useRef<(() => void) | null>(null);
   const screenshotRef = useRef<(() => void) | null>(null);
   const clearMeasureRef = useRef<(() => void) | null>(null);
+  const recordTurntableRef = useRef<
+    | ((
+        durationSec: number,
+        onProgress: (pct: number) => void
+      ) => Promise<{ blob: Blob; url: string; mimeType: string; isMp4: boolean }>)
+    | null
+  >(null);
+  const stopRecordingRef = useRef<(() => void) | null>(null);
 
   // Notification helper
   const showToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
@@ -81,6 +99,43 @@ export default function App() {
     setTimeout(() => {
       setNotification((prev) => (prev?.message === message ? null : prev));
     }, 4000);
+  }, []);
+
+  // 360 Turntable Recording Trigger
+  const handleStartRecording = useCallback(
+    async (durationSec: number) => {
+      if (!recordTurntableRef.current) return;
+      setIsRecording(true);
+      setRecordingProgress(0);
+      try {
+        const res = await recordTurntableRef.current(durationSec, (pct) => {
+          setRecordingProgress(pct);
+        });
+        setRecordedVideoUrl(res.url);
+        setRecordedFileSize(res.blob.size);
+        const ext = res.isMp4 ? 'mp4' : 'webm';
+        const safeName = (metadata?.fileName || 'cad_model')
+          .replace(/\.[^/.]+$/, '')
+          .replace(/[^a-zA-Z0-9_\-\u3000-\u303f\u3040-\u309f\u30a0-\u30ff\uff00-\uff9f\u4e00-\u9faf]/g, '_');
+        const filename = `${safeName}_360_${Date.now()}.${ext}`;
+        setRecordedFileName(filename);
+        showToast(
+          `360°回転動画の生成が完了しました！ [${(res.blob.size / 1024 / 1024).toFixed(2)} MB]`
+        );
+      } catch (err: any) {
+        console.error(err);
+        showToast(err.message || '録画中にエラーが発生しました', 'error');
+      } finally {
+        setIsRecording(false);
+      }
+    },
+    [metadata, showToast]
+  );
+
+  const handleStopRecording = useCallback(() => {
+    if (stopRecordingRef.current) {
+      stopRecordingRef.current();
+    }
   }, []);
 
   // -------------------------------------------------------------
@@ -409,6 +464,7 @@ export default function App() {
         onOpenCompare={() => compareInputRef.current?.click()}
         onOpenSample={() => setSampleModalOpen(true)}
         onScreenshot={() => screenshotRef.current?.()}
+        onOpenVideoExport={() => setVideoModalOpen(true)}
         onToggleFullscreen={handleToggleFullscreen}
         onResetView={() => resetCameraRef.current?.()}
         inspectorOpen={inspectorOpen}
@@ -433,6 +489,7 @@ export default function App() {
           clearMeasureRef.current = fn;
         }}
         autoRotate={autoRotate}
+        rotationSpeed={rotationSpeed}
         pivotMode={pivotMode}
         backgroundColor={backgroundColor}
         showGrid={showGrid}
@@ -452,6 +509,12 @@ export default function App() {
         }}
         onScreenshotRef={(fn) => {
           screenshotRef.current = fn;
+        }}
+        onRecordTurntableRef={(fn) => {
+          recordTurntableRef.current = fn;
+        }}
+        onStopRecordingRef={(fn) => {
+          stopRecordingRef.current = fn;
         }}
         selectedPartId={selectedPartId}
         onSelectPart={setSelectedPartId}
@@ -492,6 +555,9 @@ export default function App() {
         hasMeasurePoints={hasMeasurePoints}
         autoRotate={autoRotate}
         onToggleAutoRotate={() => setAutoRotate((prev) => !prev)}
+        rotationSpeed={rotationSpeed}
+        onSetRotationSpeed={setRotationSpeed}
+        onOpenVideoExport={() => setVideoModalOpen(true)}
         onSetCameraView={(view) => setCameraViewRef.current?.(view)}
         pivotMode={pivotMode}
         onResetPivot={() => {
@@ -542,6 +608,19 @@ export default function App() {
         isOpen={sampleModalOpen}
         onClose={() => setSampleModalOpen(false)}
         onSelectSample={handleSelectSample}
+      />
+
+      {/* 360 Turntable Video Export Modal */}
+      <VideoExportModal
+        isOpen={videoModalOpen}
+        onClose={() => setVideoModalOpen(false)}
+        isRecording={isRecording}
+        recordingProgress={recordingProgress}
+        onStartRecording={handleStartRecording}
+        onStopRecording={handleStopRecording}
+        recordedVideoUrl={recordedVideoUrl}
+        recordedFileSize={recordedFileSize}
+        recordedFileName={recordedFileName}
       />
 
       {/* Loading Overlay */}

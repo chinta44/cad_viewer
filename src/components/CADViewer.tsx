@@ -25,6 +25,7 @@ interface CADViewerProps {
   onMeasureComplete: (res: MeasureResult) => void;
   onClearMeasureRef?: (clearFn: () => void) => void;
   autoRotate: boolean;
+  rotationSpeed?: number;
   pivotMode: PivotMode;
   backgroundColor: string;
   showGrid: boolean;
@@ -35,6 +36,13 @@ interface CADViewerProps {
   onResetCameraRef?: (resetFn: () => void) => void;
   onResetPivotRef?: (resetPivotFn: () => void) => void;
   onScreenshotRef?: (screenshotFn: () => void) => void;
+  onRecordTurntableRef?: (
+    recordFn: (
+      durationSec: number,
+      onProgress: (pct: number) => void
+    ) => Promise<{ blob: Blob; url: string; mimeType: string; isMp4: boolean }>
+  ) => void;
+  onStopRecordingRef?: (stopFn: () => void) => void;
   selectedPartId: string | null;
   onSelectPart: (id: string | null) => void;
   onCustomPivotChanged?: (hasCustom: boolean) => void;
@@ -52,6 +60,7 @@ export const CADViewer: React.FC<CADViewerProps> = ({
   onMeasureComplete,
   onClearMeasureRef,
   autoRotate,
+  rotationSpeed = 1.0,
   pivotMode,
   backgroundColor,
   showGrid,
@@ -62,6 +71,8 @@ export const CADViewer: React.FC<CADViewerProps> = ({
   onResetCameraRef,
   onResetPivotRef,
   onScreenshotRef,
+  onRecordTurntableRef,
+  onStopRecordingRef,
   selectedPartId,
   onSelectPart,
   onCustomPivotChanged,
@@ -113,6 +124,29 @@ export const CADViewer: React.FC<CADViewerProps> = ({
     progress: number;
     duration: number; // in frames
   } | null>(null);
+
+  // Turntable Video Recording state
+  const recordingStateRef = useRef<{
+    active: boolean;
+    recorder: MediaRecorder | null;
+    chunks: Blob[];
+    resolve: ((result: { blob: Blob; url: string; mimeType: string; isMp4: boolean }) => void) | null;
+    reject: ((err: any) => void) | null;
+    currentFrame: number;
+    totalFrames: number;
+    stepAngle: number;
+    onProgress: ((pct: number) => void) | null;
+  }>({
+    active: false,
+    recorder: null,
+    chunks: [],
+    resolve: null,
+    reject: null,
+    currentFrame: 0,
+    totalFrames: 0,
+    stepAngle: 0,
+    onProgress: null,
+  });
 
   // -------------------------------------------------------------
   // INITIALIZE THREE.JS ENGINE
@@ -248,9 +282,23 @@ export const CADViewer: React.FC<CADViewerProps> = ({
 
       controls.update();
 
-      // Auto rotation: Rotates pivotGroup around its exact origin (which is the model center!)
-      if (autoRotate) {
-        pivotGroupRef.current.rotation.y += 0.005;
+      // Handle 360 Turntable Video Recording Frame Advancement
+      const rec = recordingStateRef.current;
+      if (rec.active) {
+        pivotGroupRef.current.rotation.y += rec.stepAngle;
+        rec.currentFrame++;
+        const pct = Math.min((rec.currentFrame / rec.totalFrames) * 100, 100);
+        if (rec.onProgress) rec.onProgress(pct);
+
+        if (rec.currentFrame >= rec.totalFrames) {
+          rec.active = false;
+          if (rec.recorder && rec.recorder.state !== 'inactive') {
+            rec.recorder.stop();
+          }
+        }
+      } else if (autoRotate) {
+        // Auto rotation around exact geometric center with configurable speed
+        pivotGroupRef.current.rotation.y += 0.007 * rotationSpeed;
       }
 
       // Update measure label screen position
@@ -727,13 +775,127 @@ export const CADViewer: React.FC<CADViewerProps> = ({
     a.click();
   }, []);
 
+  // 360 Turntable Video Recording Implementation
+  const stopTurntableRecording = useCallback(() => {
+    const rec = recordingStateRef.current;
+    if (rec.active) {
+      rec.active = false;
+      if (rec.recorder && rec.recorder.state !== 'inactive') {
+        rec.recorder.stop();
+      }
+    }
+  }, []);
+
+  const recordTurntableVideo = useCallback(
+    (durationSec: number = 8, onProgress: (pct: number) => void) => {
+      return new Promise<{ blob: Blob; url: string; mimeType: string; isMp4: boolean }>(
+        (resolve, reject) => {
+          if (!rendererRef.current) {
+            reject(new Error('3Dキャンバスが初期化されていません'));
+            return;
+          }
+
+          const canvas = rendererRef.current.domElement;
+          const stream = canvas.captureStream(60);
+
+          // Detect best supported video container (prioritize MP4 H.264 for smallest size & best compatibility)
+          const preferredTypes = [
+            'video/mp4;codecs=avc1',
+            'video/mp4',
+            'video/webm;codecs=vp9',
+            'video/webm;codecs=vp8',
+            'video/webm',
+          ];
+          const mimeType = preferredTypes.find((t) => MediaRecorder.isTypeSupported(t)) || 'video/webm';
+          const isMp4 = mimeType.includes('mp4');
+
+          let recorder: MediaRecorder;
+          try {
+            recorder = new MediaRecorder(stream, {
+              mimeType,
+              videoBitsPerSecond: 4_000_000, // 4Mbps for crystal clear 60fps 1080p CAD turntable
+            });
+          } catch {
+            try {
+              recorder = new MediaRecorder(stream);
+            } catch (err) {
+              reject(err);
+              return;
+            }
+          }
+
+          const chunks: Blob[] = [];
+          recorder.ondataavailable = (e) => {
+            if (e.data && e.data.size > 0) chunks.push(e.data);
+          };
+
+          recorder.onstop = () => {
+            recordingStateRef.current.active = false;
+            const finalMime = recorder.mimeType || mimeType;
+            const blob = new Blob(chunks, { type: finalMime });
+            const url = URL.createObjectURL(blob);
+            if (recordingStateRef.current.resolve) {
+              recordingStateRef.current.resolve({
+                blob,
+                url,
+                mimeType: finalMime,
+                isMp4: finalMime.includes('mp4'),
+              });
+            }
+          };
+
+          recorder.onerror = (e) => {
+            recordingStateRef.current.active = false;
+            if (recordingStateRef.current.reject) {
+              recordingStateRef.current.reject(e);
+            }
+          };
+
+          const targetFps = 60;
+          const totalFrames = Math.max(Math.round(durationSec * targetFps), 60);
+          const stepAngle = (Math.PI * 2) / totalFrames;
+
+          recordingStateRef.current = {
+            active: true,
+            recorder,
+            chunks,
+            resolve,
+            reject,
+            currentFrame: 0,
+            totalFrames,
+            stepAngle,
+            onProgress,
+          };
+
+          recorder.start(100);
+        }
+      );
+    },
+    []
+  );
+
   // Expose callbacks to parent
   useEffect(() => {
     if (onSetCameraViewRef) onSetCameraViewRef(setCameraView);
     if (onResetCameraRef) onResetCameraRef(fitCamera);
     if (onResetPivotRef) onResetPivotRef(resetPivot);
     if (onScreenshotRef) onScreenshotRef(captureScreenshot);
-  }, [onSetCameraViewRef, onResetCameraRef, onResetPivotRef, onScreenshotRef, setCameraView, fitCamera, resetPivot, captureScreenshot]);
+    if (onRecordTurntableRef) onRecordTurntableRef(recordTurntableVideo);
+    if (onStopRecordingRef) onStopRecordingRef(stopTurntableRecording);
+  }, [
+    onSetCameraViewRef,
+    onResetCameraRef,
+    onResetPivotRef,
+    onScreenshotRef,
+    onRecordTurntableRef,
+    onStopRecordingRef,
+    setCameraView,
+    fitCamera,
+    resetPivot,
+    captureScreenshot,
+    recordTurntableVideo,
+    stopTurntableRecording,
+  ]);
 
   // -------------------------------------------------------------
   // INTERACTIVE CLICKS: DOUBLE-CLICK TO SET PIVOT & MEASUREMENT
