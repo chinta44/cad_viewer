@@ -148,6 +148,25 @@ export const CADViewer: React.FC<CADViewerProps> = ({
     onProgress: null,
   });
 
+  // State refs to prevent stale closures inside animate loop
+  const autoRotateRef = useRef(autoRotate);
+  useEffect(() => {
+    autoRotateRef.current = autoRotate;
+  }, [autoRotate]);
+
+  const rotationSpeedRef = useRef(rotationSpeed);
+  useEffect(() => {
+    rotationSpeedRef.current = rotationSpeed;
+  }, [rotationSpeed]);
+
+  const activeMeasureRef = useRef(activeMeasure);
+  useEffect(() => {
+    activeMeasureRef.current = activeMeasure;
+  }, [activeMeasure]);
+
+  // Delta time clock for frame-rate-independent smooth rotation
+  const clockRef = useRef<THREE.Clock>(new THREE.Clock());
+
   // -------------------------------------------------------------
   // INITIALIZE THREE.JS ENGINE
   // -------------------------------------------------------------
@@ -280,6 +299,8 @@ export const CADViewer: React.FC<CADViewerProps> = ({
         }
       }
 
+      const delta = Math.min(clockRef.current.getDelta(), 0.1); // clamp delta in case of tab switch
+
       controls.update();
 
       // Handle 360 Turntable Video Recording Frame Advancement
@@ -296,14 +317,15 @@ export const CADViewer: React.FC<CADViewerProps> = ({
             rec.recorder.stop();
           }
         }
-      } else if (autoRotate) {
-        // Auto rotation around exact geometric center with configurable speed
-        pivotGroupRef.current.rotation.y += 0.007 * rotationSpeed;
+      } else if (autoRotateRef.current) {
+        // Frame-rate-independent auto rotation around exact geometric center (~12 sec per 360 rotation at 1.0x speed)
+        const angularVelocity = (Math.PI / 6) * rotationSpeedRef.current; // ~0.523 rad/sec (30 deg/sec)
+        pivotGroupRef.current.rotation.y += angularVelocity * delta;
       }
 
       // Update measure label screen position
-      if (activeMeasure && camera) {
-        const midPoint = activeMeasure.p1.clone().lerp(activeMeasure.p2, 0.5);
+      if (activeMeasureRef.current && camera) {
+        const midPoint = activeMeasureRef.current.p1.clone().lerp(activeMeasureRef.current.p2, 0.5);
         // Project to 2D
         const projected = midPoint.clone().project(camera);
         const halfWidth = container.clientWidth / 2;
@@ -486,7 +508,15 @@ export const CADViewer: React.FC<CADViewerProps> = ({
 
     computeAndApplyBounds();
     fitCamera(false);
-  }, [parts, computeAndApplyBounds]);
+    if (controlsRef.current) {
+      controlsRef.current.target.set(0, 0, 0);
+      controlsRef.current.update();
+    }
+    setHasCustomPivot(false);
+    if (onCustomPivotChanged) onCustomPivotChanged(false);
+    if (pivotMarkerRef.current) pivotMarkerRef.current.visible = false;
+    pivotGroupRef.current.rotation.set(0, 0, 0);
+  }, [parts, computeAndApplyBounds, onCustomPivotChanged]);
 
   // Update pivot mode (center vs origin)
   useEffect(() => {
