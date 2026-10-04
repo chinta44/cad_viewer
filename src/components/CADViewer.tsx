@@ -47,6 +47,7 @@ interface CADViewerProps {
   onSelectPart: (id: string | null) => void;
   onCustomPivotChanged?: (hasCustom: boolean) => void;
   isFullscreen?: boolean;
+  isIdle?: boolean;
 }
 
 export const CADViewer: React.FC<CADViewerProps> = ({
@@ -78,6 +79,7 @@ export const CADViewer: React.FC<CADViewerProps> = ({
   onSelectPart,
   onCustomPivotChanged,
   isFullscreen = false,
+  isIdle = false,
 }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
 
@@ -1098,14 +1100,16 @@ export const CADViewer: React.FC<CADViewerProps> = ({
       onPointerDown={handlePointerDown}
       onPointerUp={handlePointerUp}
       onDoubleClick={handleDoubleClick}
-      className="absolute inset-0 w-full h-full cursor-grab active:cursor-grabbing overflow-hidden"
+      className={`absolute inset-0 w-full h-full overflow-hidden ${
+        isFullscreen && isIdle ? 'cursor-none' : 'cursor-grab active:cursor-grabbing'
+      }`}
     >
       {/* Floating XYZ Model Dimensions HUD (Top-Left) */}
       {boundsSizeRef.current && parts.length > 0 && boundsSizeRef.current.length() > 0 && (
         <div
-          className={`absolute left-4 z-20 pointer-events-auto flex items-center gap-2 select-none transition-all duration-200 ${
+          className={`absolute left-4 z-20 pointer-events-auto flex items-center gap-2 select-none transition-all duration-300 ${
             isFullscreen ? 'top-4' : 'top-16'
-          }`}
+          } ${isFullscreen && isIdle ? 'opacity-0 pointer-events-none -translate-y-2' : 'opacity-100'}`}
         >
           <div className="bg-slate-900/90 backdrop-blur-xl border border-slate-700/80 rounded-xl px-3 py-2 shadow-2xl flex items-center gap-3 text-xs">
             <div className="flex items-center gap-1.5 font-bold text-slate-200">
@@ -1208,7 +1212,11 @@ export const CADViewer: React.FC<CADViewerProps> = ({
       )}
 
       {/* Viewport Interaction Hint */}
-      <div className="absolute bottom-2 left-4 text-[11px] text-slate-500/80 font-mono pointer-events-none select-none drop-shadow">
+      <div
+        className={`absolute bottom-2 left-4 text-[11px] text-slate-500/80 font-mono pointer-events-none select-none drop-shadow transition-opacity duration-300 ${
+          isFullscreen && isIdle ? 'opacity-0' : 'opacity-100'
+        }`}
+      >
         ドラッグ: 回転 · ホイール: ズーム · 右ドラッグ: パン · ダブルクリック: 回転中心設定
       </div>
     </div>

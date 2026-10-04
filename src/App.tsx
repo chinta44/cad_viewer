@@ -490,13 +490,74 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleToggleFullscreen, isFullscreen]);
 
+  // Idle (inactivity) detection in fullscreen mode: hide cursor & all UI after 2.5s
+  const [isIdle, setIsIdle] = useState<boolean>(false);
+  const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const resetIdleTimer = useCallback(() => {
+    setIsIdle(false);
+    if (idleTimerRef.current) {
+      clearTimeout(idleTimerRef.current);
+      idleTimerRef.current = null;
+    }
+
+    if (isFullscreen && !sampleModalOpen && !videoModalOpen) {
+      idleTimerRef.current = setTimeout(() => {
+        setIsIdle(true);
+      }, 2500);
+    }
+  }, [isFullscreen, sampleModalOpen, videoModalOpen]);
+
+  useEffect(() => {
+    if (!isFullscreen) {
+      setIsIdle(false);
+      if (idleTimerRef.current) {
+        clearTimeout(idleTimerRef.current);
+        idleTimerRef.current = null;
+      }
+      return;
+    }
+
+    resetIdleTimer();
+
+    const activityEvents = [
+      'mousemove',
+      'mousedown',
+      'mouseup',
+      'pointermove',
+      'pointerdown',
+      'pointerup',
+      'wheel',
+      'touchstart',
+      'touchmove',
+      'keydown',
+    ];
+
+    const handleUserActivity = () => {
+      resetIdleTimer();
+    };
+
+    activityEvents.forEach((ev) =>
+      window.addEventListener(ev, handleUserActivity, { passive: true })
+    );
+
+    return () => {
+      activityEvents.forEach((ev) =>
+        window.removeEventListener(ev, handleUserActivity)
+      );
+      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+    };
+  }, [isFullscreen, resetIdleTimer]);
+
   return (
     <div
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
-      className="relative w-screen h-screen overflow-hidden bg-slate-950 font-sans"
+      className={`relative w-screen h-screen overflow-hidden bg-slate-950 font-sans ${
+        isFullscreen && isIdle ? 'cursor-none' : ''
+      }`}
     >
       {/* Hidden File Inputs */}
       <input
@@ -537,9 +598,13 @@ export default function App() {
         />
       )}
 
-      {/* Floating Exit Fullscreen Button (Shown in Fullscreen) */}
+      {/* Floating Exit Fullscreen Button (Shown in Fullscreen with Idle Fadeout) */}
       {isFullscreen && (
-        <div className="absolute top-3.5 right-4 z-30 flex items-center gap-2 animate-in fade-in slide-in-from-top-2 duration-150 select-none">
+        <div
+          className={`absolute top-3.5 right-4 z-30 flex items-center gap-2 select-none transition-all duration-300 ${
+            isIdle ? 'opacity-0 pointer-events-none -translate-y-2' : 'opacity-100 translate-y-0'
+          }`}
+        >
           <button
             onClick={handleToggleFullscreen}
             className="flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-slate-200 bg-slate-900/95 hover:bg-slate-800 hover:text-white border border-slate-700/80 hover:border-sky-500/60 rounded-xl shadow-2xl backdrop-blur-xl transition-all cursor-pointer group"
@@ -603,6 +668,7 @@ export default function App() {
         onSelectPart={setSelectedPartId}
         onCustomPivotChanged={setHasCustomPivot}
         isFullscreen={isFullscreen}
+        isIdle={isIdle}
       />
 
       {/* 3D Orientation Gizmo */}
@@ -610,6 +676,7 @@ export default function App() {
         camera={cameraRef.current}
         onSetView={(view) => setCameraViewRef.current?.(view)}
         isFullscreen={isFullscreen}
+        isIdle={isIdle}
       />
 
       {/* Floating Bottom Toolbar */}
@@ -644,6 +711,7 @@ export default function App() {
         onSetRotationSpeed={setRotationSpeed}
         onOpenVideoExport={() => setVideoModalOpen(true)}
         isFullscreen={isFullscreen}
+        isIdle={isIdle}
         onToggleFullscreen={handleToggleFullscreen}
         onSetCameraView={(view) => setCameraViewRef.current?.(view)}
         pivotMode={pivotMode}

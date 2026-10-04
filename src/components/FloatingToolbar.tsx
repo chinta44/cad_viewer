@@ -40,6 +40,7 @@ interface FloatingToolbarProps {
   onSetRotationSpeed: (speed: number) => void;
   onOpenVideoExport: () => void;
   isFullscreen?: boolean;
+  isIdle?: boolean;
   onToggleFullscreen?: () => void;
   onSetCameraView: (view: CameraView) => void;
   pivotMode: PivotMode;
@@ -70,6 +71,7 @@ export const FloatingToolbar: React.FC<FloatingToolbarProps> = ({
   onSetRotationSpeed,
   onOpenVideoExport,
   isFullscreen = false,
+  isIdle = false,
   onToggleFullscreen,
   onSetCameraView,
   pivotMode,
@@ -82,8 +84,14 @@ export const FloatingToolbar: React.FC<FloatingToolbarProps> = ({
     setActiveMenu((prev) => (prev === menu ? null : menu));
   };
 
+  const shouldHide = isFullscreen && isIdle && !activeMenu;
+
   return (
-    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-30 flex flex-col items-center gap-2 select-none pointer-events-auto">
+    <div
+      className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-30 flex flex-col items-center gap-2 select-none pointer-events-auto transition-all duration-300 ${
+        shouldHide ? 'opacity-0 pointer-events-none translate-y-6' : 'opacity-100 translate-y-0'
+      }`}
+    >
       {/* Popover Flyout Menu */}
       {activeMenu && (
         <div className="bg-slate-900/95 backdrop-blur-xl border border-slate-700/80 rounded-2xl p-3 shadow-2xl text-xs text-slate-200 animate-in fade-in zoom-in-95 duration-150 mb-1 min-w-[240px]">

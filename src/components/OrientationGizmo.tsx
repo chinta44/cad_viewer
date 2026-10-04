@@ -5,12 +5,14 @@ interface OrientationGizmoProps {
   camera: THREE.Camera | null;
   onSetView: (axis: 'top' | 'bottom' | 'front' | 'back' | 'left' | 'right') => void;
   isFullscreen?: boolean;
+  isIdle?: boolean;
 }
 
 export const OrientationGizmo: React.FC<OrientationGizmoProps> = ({
   camera,
   onSetView,
   isFullscreen = false,
+  isIdle = false,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -112,8 +114,12 @@ export const OrientationGizmo: React.FC<OrientationGizmoProps> = ({
 
   return (
     <div
-      className={`absolute z-20 flex flex-col items-center select-none pointer-events-auto transition-all duration-200 ${
+      className={`absolute z-20 flex flex-col items-center select-none pointer-events-auto transition-all duration-300 ${
         isFullscreen ? 'top-14 right-4' : 'top-16 right-4'
+      } ${
+        isFullscreen && isIdle
+          ? 'opacity-0 pointer-events-none translate-x-3'
+          : 'opacity-100 translate-x-0'
       }`}
     >
       <div className="bg-slate-900/80 backdrop-blur-md border border-slate-700/50 rounded-2xl p-1 shadow-2xl hover:border-sky-500/50 transition-colors">
