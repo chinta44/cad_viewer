@@ -46,6 +46,7 @@ interface CADViewerProps {
   selectedPartId: string | null;
   onSelectPart: (id: string | null) => void;
   onCustomPivotChanged?: (hasCustom: boolean) => void;
+  isFullscreen?: boolean;
 }
 
 export const CADViewer: React.FC<CADViewerProps> = ({
@@ -76,6 +77,7 @@ export const CADViewer: React.FC<CADViewerProps> = ({
   selectedPartId,
   onSelectPart,
   onCustomPivotChanged,
+  isFullscreen = false,
 }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
 
@@ -1100,7 +1102,11 @@ export const CADViewer: React.FC<CADViewerProps> = ({
     >
       {/* Floating XYZ Model Dimensions HUD (Top-Left) */}
       {boundsSizeRef.current && parts.length > 0 && boundsSizeRef.current.length() > 0 && (
-        <div className="absolute top-16 left-4 z-20 pointer-events-auto flex items-center gap-2 select-none animate-in fade-in slide-in-from-top-2 duration-150">
+        <div
+          className={`absolute left-4 z-20 pointer-events-auto flex items-center gap-2 select-none transition-all duration-200 ${
+            isFullscreen ? 'top-4' : 'top-16'
+          }`}
+        >
           <div className="bg-slate-900/90 backdrop-blur-xl border border-slate-700/80 rounded-xl px-3 py-2 shadow-2xl flex items-center gap-3 text-xs">
             <div className="flex items-center gap-1.5 font-bold text-slate-200">
               <Box className="w-3.5 h-3.5 text-sky-400" />
@@ -1143,7 +1149,11 @@ export const CADViewer: React.FC<CADViewerProps> = ({
 
       {/* Measurement Guidance Banner (Top-Center) */}
       {isMeasuring && (
-        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-20 pointer-events-auto select-none animate-in fade-in slide-in-from-top-2 duration-150">
+        <div
+          className={`absolute left-1/2 -translate-x-1/2 z-20 pointer-events-auto select-none transition-all duration-200 ${
+            isFullscreen ? 'top-4' : 'top-16'
+          }`}
+        >
           <div className="bg-slate-900/95 backdrop-blur-xl border border-rose-500/60 rounded-xl px-4 py-2 shadow-2xl flex items-center gap-3 text-xs text-slate-200">
             <Ruler className="w-4 h-4 text-rose-400 shrink-0" />
             <div className="flex items-center gap-2">

@@ -3,6 +3,7 @@ import {
   FolderOpen,
   Camera,
   Maximize2,
+  Minimize2,
   Box,
   Layers,
   Sparkles,
@@ -20,6 +21,7 @@ interface TopBarProps {
   onOpenSample: () => void;
   onScreenshot: () => void;
   onOpenVideoExport?: () => void;
+  isFullscreen?: boolean;
   onToggleFullscreen: () => void;
   onResetView: () => void;
   inspectorOpen: boolean;
@@ -33,6 +35,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   onOpenSample,
   onScreenshot,
   onOpenVideoExport,
+  isFullscreen = false,
   onToggleFullscreen,
   onResetView,
   inspectorOpen,
@@ -140,10 +143,14 @@ export const TopBar: React.FC<TopBarProps> = ({
 
         <button
           onClick={onToggleFullscreen}
-          className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
-          title="全画面表示の切り替え"
+          className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+            isFullscreen
+              ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40'
+              : 'text-slate-400 hover:text-white hover:bg-slate-800'
+          }`}
+          title={isFullscreen ? '全画面表示を終了 (Esc / F)' : 'モデルを全画面表示 (F)'}
         >
-          <Maximize2 className="w-4 h-4" />
+          {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
         </button>
 
         <button

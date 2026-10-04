@@ -11,7 +11,9 @@ import {
   Target,
   Video,
   Play,
-  ChevronUp
+  ChevronUp,
+  Maximize2,
+  Minimize2
 } from 'lucide-react';
 import { ViewMode, MaterialPreset, ClipAxis, CameraView, PivotMode } from '../types/cad';
 
@@ -37,6 +39,8 @@ interface FloatingToolbarProps {
   rotationSpeed: number;
   onSetRotationSpeed: (speed: number) => void;
   onOpenVideoExport: () => void;
+  isFullscreen?: boolean;
+  onToggleFullscreen?: () => void;
   onSetCameraView: (view: CameraView) => void;
   pivotMode: PivotMode;
   onResetPivot: () => void;
@@ -65,6 +69,8 @@ export const FloatingToolbar: React.FC<FloatingToolbarProps> = ({
   rotationSpeed,
   onSetRotationSpeed,
   onOpenVideoExport,
+  isFullscreen = false,
+  onToggleFullscreen,
   onSetCameraView,
   pivotMode,
   onResetPivot,
@@ -487,6 +493,30 @@ export const FloatingToolbar: React.FC<FloatingToolbarProps> = ({
             {hasCustomPivot ? '中心へ復帰' : '中心軸'}
           </span>
         </button>
+
+        {onToggleFullscreen && (
+          <>
+            <div className="h-4 w-px bg-slate-800 mx-0.5" />
+            <button
+              onClick={onToggleFullscreen}
+              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-medium transition-colors cursor-pointer ${
+                isFullscreen
+                  ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40'
+                  : 'hover:bg-slate-800 text-slate-400 hover:text-slate-200'
+              }`}
+              title={isFullscreen ? '全画面表示を終了 (Esc / F)' : 'モデルを全画面表示 (F)'}
+            >
+              {isFullscreen ? (
+                <Minimize2 className="w-4 h-4 text-sky-400" />
+              ) : (
+                <Maximize2 className="w-4 h-4" />
+              )}
+              <span className="hidden xl:inline">
+                {isFullscreen ? '全画面終了' : '全画面'}
+              </span>
+            </button>
+          </>
+        )}
       </div>
     </div>
   );

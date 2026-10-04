@@ -19,7 +19,7 @@ import { InspectorPanel } from './components/InspectorPanel';
 import { OrientationGizmo } from './components/OrientationGizmo';
 import { SampleModelModal } from './components/SampleModelModal';
 import { VideoExportModal } from './components/VideoExportModal';
-import { UploadCloud, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import { UploadCloud, CheckCircle2, AlertCircle, Loader2, Minimize2 } from 'lucide-react';
 
 export default function App() {
   // Model state
@@ -37,6 +37,10 @@ export default function App() {
   const [rotationSpeed, setRotationSpeed] = useState<number>(1.0);
   const [pivotMode, setPivotMode] = useState<PivotMode>('center');
   const [hasCustomPivot, setHasCustomPivot] = useState(false);
+
+  // Fullscreen state
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+  const prevInspectorStateRef = useRef<boolean>(true);
 
   // 360 Video Export state
   const [videoModalOpen, setVideoModalOpen] = useState(false);
@@ -419,13 +423,72 @@ export default function App() {
     showToast('比較モデルの中心を一致させました');
   };
 
-  const handleToggleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch(() => {});
-    } else {
-      document.exitFullscreen().catch(() => {});
-    }
-  };
+  const handleToggleFullscreen = useCallback(() => {
+    setIsFullscreen((prev) => {
+      const next = !prev;
+      if (next) {
+        // Memorize inspector open state and close it to give 100% canvas viewport
+        prevInspectorStateRef.current = inspectorOpen;
+        setInspectorOpen(false);
+
+        // Try native HTML5 fullscreen if available
+        if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+          document.documentElement.requestFullscreen().catch(() => {});
+        }
+        showToast('全画面モードを開始しました (Esc または Fキーで終了)');
+      } else {
+        // Restore inspector panel state
+        setInspectorOpen(prevInspectorStateRef.current);
+
+        if (document.fullscreenElement && document.exitFullscreen) {
+          document.exitFullscreen().catch(() => {});
+        }
+        showToast('通常表示に戻りました');
+      }
+
+      // Trigger resize for Three.js camera & renderer
+      setTimeout(() => {
+        window.dispatchEvent(new Event('resize'));
+      }, 60);
+
+      return next;
+    });
+  }, [inspectorOpen, showToast]);
+
+  // Sync with browser native fullscreen exit (e.g. user pressed browser Esc)
+  useEffect(() => {
+    const onFullscreenChange = () => {
+      const isDocFullscreen = Boolean(document.fullscreenElement);
+      if (!isDocFullscreen && isFullscreen) {
+        setIsFullscreen(false);
+        setInspectorOpen(prevInspectorStateRef.current);
+        setTimeout(() => {
+          window.dispatchEvent(new Event('resize'));
+        }, 60);
+      }
+    };
+
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', onFullscreenChange);
+  }, [isFullscreen]);
+
+  // Keyboard shortcut: 'F' toggles fullscreen, 'Escape' exits
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
+      if (e.key === 'f' || e.key === 'F') {
+        e.preventDefault();
+        handleToggleFullscreen();
+      } else if (e.key === 'Escape' && isFullscreen) {
+        e.preventDefault();
+        handleToggleFullscreen();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleToggleFullscreen, isFullscreen]);
 
   return (
     <div
@@ -457,19 +520,39 @@ export default function App() {
         className="hidden"
       />
 
-      {/* Top Bar */}
-      <TopBar
-        metadata={metadata}
-        onOpenFile={() => fileInputRef.current?.click()}
-        onOpenCompare={() => compareInputRef.current?.click()}
-        onOpenSample={() => setSampleModalOpen(true)}
-        onScreenshot={() => screenshotRef.current?.()}
-        onOpenVideoExport={() => setVideoModalOpen(true)}
-        onToggleFullscreen={handleToggleFullscreen}
-        onResetView={() => resetCameraRef.current?.()}
-        inspectorOpen={inspectorOpen}
-        onToggleInspector={() => setInspectorOpen((prev) => !prev)}
-      />
+      {/* Top Bar (Hidden in Fullscreen for immersive experience) */}
+      {!isFullscreen && (
+        <TopBar
+          metadata={metadata}
+          onOpenFile={() => fileInputRef.current?.click()}
+          onOpenCompare={() => compareInputRef.current?.click()}
+          onOpenSample={() => setSampleModalOpen(true)}
+          onScreenshot={() => screenshotRef.current?.()}
+          onOpenVideoExport={() => setVideoModalOpen(true)}
+          isFullscreen={isFullscreen}
+          onToggleFullscreen={handleToggleFullscreen}
+          onResetView={() => resetCameraRef.current?.()}
+          inspectorOpen={inspectorOpen}
+          onToggleInspector={() => setInspectorOpen((prev) => !prev)}
+        />
+      )}
+
+      {/* Floating Exit Fullscreen Button (Shown in Fullscreen) */}
+      {isFullscreen && (
+        <div className="absolute top-3.5 right-4 z-30 flex items-center gap-2 animate-in fade-in slide-in-from-top-2 duration-150 select-none">
+          <button
+            onClick={handleToggleFullscreen}
+            className="flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-slate-200 bg-slate-900/95 hover:bg-slate-800 hover:text-white border border-slate-700/80 hover:border-sky-500/60 rounded-xl shadow-2xl backdrop-blur-xl transition-all cursor-pointer group"
+            title="全画面表示を終了 (Esc または Fキー)"
+          >
+            <Minimize2 className="w-3.5 h-3.5 text-sky-400 group-hover:scale-110 transition-transform" />
+            <span>全画面を終了</span>
+            <kbd className="text-[10px] font-mono bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700 text-slate-400 font-normal">
+              Esc
+            </kbd>
+          </button>
+        </div>
+      )}
 
       {/* Main 3D Canvas */}
       <CADViewer
@@ -519,12 +602,14 @@ export default function App() {
         selectedPartId={selectedPartId}
         onSelectPart={setSelectedPartId}
         onCustomPivotChanged={setHasCustomPivot}
+        isFullscreen={isFullscreen}
       />
 
       {/* 3D Orientation Gizmo */}
       <OrientationGizmo
         camera={cameraRef.current}
         onSetView={(view) => setCameraViewRef.current?.(view)}
+        isFullscreen={isFullscreen}
       />
 
       {/* Floating Bottom Toolbar */}
@@ -558,6 +643,8 @@ export default function App() {
         rotationSpeed={rotationSpeed}
         onSetRotationSpeed={setRotationSpeed}
         onOpenVideoExport={() => setVideoModalOpen(true)}
+        isFullscreen={isFullscreen}
+        onToggleFullscreen={handleToggleFullscreen}
         onSetCameraView={(view) => setCameraViewRef.current?.(view)}
         pivotMode={pivotMode}
         onResetPivot={() => {
