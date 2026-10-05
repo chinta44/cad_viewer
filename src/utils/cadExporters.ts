@@ -3,9 +3,17 @@ import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js';
 import { STLExporter } from 'three/examples/jsm/exporters/STLExporter.js';
 import { OBJExporter } from 'three/examples/jsm/exporters/OBJExporter.js';
 import { PLYExporter } from 'three/examples/jsm/exporters/PLYExporter.js';
+import * as fflate from 'fflate';
 import { CADPart } from '../types/cad';
 
-export type ExportFormat = 'glb-uncompressed' | 'stl-binary' | 'stl-ascii' | 'obj' | 'ply-binary' | 'html-viewer';
+export type ExportFormat =
+  | 'glb-uncompressed'
+  | 'html-viewer'
+  | 'obj-mtl-zip'
+  | 'ply-binary'
+  | 'stl-zip'
+  | 'stl-binary'
+  | 'stl-ascii';
 
 export interface ExportOptions {
   format: ExportFormat;
@@ -16,12 +24,13 @@ export interface ExportOptions {
 }
 
 /**
- * Creates a clean cloned THREE.Scene containing the target meshes for export
+ * Creates a clean cloned THREE.Scene containing the target meshes for export.
+ * Also bakes vertex colors (RGB) into the geometry so formats like PLY retain full colors.
  */
-function buildExportScene(parts: CADPart[], options: ExportOptions): THREE.Scene {
+function buildExportScene(parts: CADPart[], options: ExportOptions): { scene: THREE.Scene; validParts: CADPart[] } {
   const scene = new THREE.Scene();
 
-  const targetParts = parts.filter((p) => {
+  const validParts = parts.filter((p) => {
     if (p.isCompare) return false;
     if (options.selectedOnly && options.selectedPartId) {
       return p.id === options.selectedPartId;
@@ -32,38 +41,69 @@ function buildExportScene(parts: CADPart[], options: ExportOptions): THREE.Scene
     return true;
   });
 
-  targetParts.forEach((part) => {
+  validParts.forEach((part, index) => {
     // Clone geometry to bake current matrix/transform cleanly
     const clonedGeo = part.mesh.geometry.clone();
-    
+
     // Ensure normals are computed
     if (!clonedGeo.attributes.normal) {
       clonedGeo.computeVertexNormals();
     }
 
-    // Material with original part color
-    const mat = new THREE.MeshStandardMaterial({
-      color: part.color,
-      roughness: 0.4,
-      metalness: 0.2,
-      side: THREE.DoubleSide,
-    });
+    // Bake vertex colors directly into geometry for formats that read vertex colors (e.g. PLY)
+    const posAttr = clonedGeo.getAttribute('position');
+    if (posAttr) {
+      const vertCount = posAttr.count;
+      const colorArr = new Float32Array(vertCount * 3);
+      const r = part.color.r;
+      const g = part.color.g;
+      const b = part.color.b;
+      for (let i = 0; i < vertCount; i++) {
+        colorArr[i * 3] = r;
+        colorArr[i * 3 + 1] = g;
+        colorArr[i * 3 + 2] = b;
+      }
+      clonedGeo.setAttribute('color', new THREE.BufferAttribute(colorArr, 3));
+    }
+
+    // Material: Use original material if present (textures, PBR), otherwise create standard material
+    let mat: THREE.Material;
+    if (part.originalMaterial) {
+      mat = part.originalMaterial.clone();
+      (mat as any).name = `Mat_${safePartName(part.name, index)}`;
+      (mat as any).side = THREE.DoubleSide;
+    } else {
+      mat = new THREE.MeshStandardMaterial({
+        name: `Mat_${safePartName(part.name, index)}`,
+        color: part.color,
+        roughness: 0.4,
+        metalness: 0.2,
+        side: THREE.DoubleSide,
+        vertexColors: Boolean(part.hasVertexColors),
+      });
+    }
 
     const mesh = new THREE.Mesh(clonedGeo, mat);
-    mesh.name = part.name;
+    mesh.name = safePartName(part.name, index);
     mesh.position.copy(part.originalPosition);
     scene.add(mesh);
   });
 
-  return scene;
+  return { scene, validParts };
+}
+
+function safePartName(name: string, index: number): string {
+  const sanitized = name.replace(/[^a-zA-Z0-9_\-]/g, '_').trim();
+  return sanitized || `Part_${index + 1}`;
 }
 
 /**
  * Export parts to standard uncompressed GLB (Binary glTF)
+ * FULL COLOR SUPPORT: Retains all part colors, PBR material properties, and part hierarchy.
  * Free of Draco/Meshopt compression so any viewer or single-file HTML can open it without decoders!
  */
 export async function exportToStandardGLB(parts: CADPart[], options: ExportOptions): Promise<Blob> {
-  const scene = buildExportScene(parts, options);
+  const { scene } = buildExportScene(parts, options);
   const exporter = new GLTFExporter();
 
   return new Promise((resolve, reject) => {
@@ -73,7 +113,6 @@ export async function exportToStandardGLB(parts: CADPart[], options: ExportOptio
         if (result instanceof ArrayBuffer) {
           resolve(new Blob([result], { type: 'model/gltf-binary' }));
         } else {
-          // If returned as JSON object
           const jsonStr = JSON.stringify(result);
           resolve(new Blob([jsonStr], { type: 'model/gltf+json' }));
         }
@@ -91,37 +130,176 @@ export async function exportToStandardGLB(parts: CADPart[], options: ExportOptio
 }
 
 /**
- * Export parts to STL format (Binary or ASCII)
+ * Export parts to Wavefront OBJ with companion MTL material file (ZIP format)
+ * FULL COLOR SUPPORT: Packs .obj and .mtl with all material diffuse colors (Kd) into a ZIP archive.
  */
-export async function exportToSTL(parts: CADPart[], options: ExportOptions, binary: boolean = true): Promise<Blob> {
-  const scene = buildExportScene(parts, options);
+export async function exportToOBJWithMTL(parts: CADPart[], options: ExportOptions): Promise<Blob> {
+  const { validParts } = buildExportScene(parts, options);
+  const baseName = (options.modelName || 'model').replace(/\.[^/.]+$/, '');
+  const mtlFilename = `${baseName}.mtl`;
+
+  // 1. Generate MTL content
+  let mtlContent = `# CADStudio 3D Viewer Material Library\n# Model: ${baseName}\n\n`;
+  validParts.forEach((part, index) => {
+    const matName = `mat_${safePartName(part.name, index)}`;
+    const r = part.color.r.toFixed(4);
+    const g = part.color.g.toFixed(4);
+    const b = part.color.b.toFixed(4);
+    mtlContent += `newmtl ${matName}\n`;
+    mtlContent += `Kd ${r} ${g} ${b}\n`;
+    mtlContent += `Ka 0.2000 0.2000 0.2000\n`;
+    mtlContent += `Ks 0.3000 0.3000 0.3000\n`;
+    mtlContent += `Ns 50.0\n`;
+    mtlContent += `d 1.0\n`;
+    mtlContent += `illum 2\n\n`;
+  });
+
+  // 2. Generate OBJ content with references to materials
+  let objContent = `# CADStudio 3D Viewer Wavefront OBJ Export\n# Model: ${baseName}\n`;
+  objContent += `mtllib ${mtlFilename}\n\n`;
+
+  let vertexOffset = 1;
+  let normalOffset = 1;
+
+  validParts.forEach((part, index) => {
+    const matName = `mat_${safePartName(part.name, index)}`;
+    const partName = safePartName(part.name, index);
+    const geo = part.mesh.geometry;
+    const posAttr = geo.getAttribute('position');
+    const normAttr = geo.getAttribute('normal');
+
+    if (!posAttr) return;
+
+    objContent += `o ${partName}\n`;
+    objContent += `g ${partName}\n`;
+    objContent += `usemtl ${matName}\n`;
+
+    const vertCount = posAttr.count;
+
+    // Write vertices
+    for (let i = 0; i < vertCount; i++) {
+      const x = (posAttr.getX(i) + part.originalPosition.x).toFixed(4);
+      const y = (posAttr.getY(i) + part.originalPosition.y).toFixed(4);
+      const z = (posAttr.getZ(i) + part.originalPosition.z).toFixed(4);
+      objContent += `v ${x} ${y} ${z}\n`;
+    }
+
+    // Write normals
+    if (normAttr) {
+      for (let i = 0; i < normAttr.count; i++) {
+        const nx = normAttr.getX(i).toFixed(4);
+        const ny = normAttr.getY(i).toFixed(4);
+        const nz = normAttr.getZ(i).toFixed(4);
+        objContent += `vn ${nx} ${ny} ${nz}\n`;
+      }
+    }
+
+    // Write faces (1-based index)
+    const indexAttr = geo.getIndex();
+    if (indexAttr) {
+      const idxCount = indexAttr.count;
+      for (let i = 0; i < idxCount; i += 3) {
+        const a = indexAttr.getX(i) + vertexOffset;
+        const b = indexAttr.getX(i + 1) + vertexOffset;
+        const c = indexAttr.getX(i + 2) + vertexOffset;
+        if (normAttr) {
+          const na = indexAttr.getX(i) + normalOffset;
+          const nb = indexAttr.getX(i + 1) + normalOffset;
+          const nc = indexAttr.getX(i + 2) + normalOffset;
+          objContent += `f ${a}//${na} ${b}//${nb} ${c}//${nc}\n`;
+        } else {
+          objContent += `f ${a} ${b} ${c}\n`;
+        }
+      }
+    } else {
+      for (let i = 0; i < vertCount; i += 3) {
+        const a = i + vertexOffset;
+        const b = i + 1 + vertexOffset;
+        const c = i + 2 + vertexOffset;
+        if (normAttr) {
+          const na = i + normalOffset;
+          const nb = i + 1 + normalOffset;
+          const nc = i + 2 + normalOffset;
+          objContent += `f ${a}//${na} ${b}//${nb} ${c}//${nc}\n`;
+        } else {
+          objContent += `f ${a} ${b} ${c}\n`;
+        }
+      }
+    }
+
+    vertexOffset += vertCount;
+    if (normAttr) {
+      normalOffset += normAttr.count;
+    }
+    objContent += `\n`;
+  });
+
+  // 3. Zip both files together using fflate
+  const zipFiles: Record<string, Uint8Array> = {
+    [`${baseName}.obj`]: fflate.strToU8(objContent),
+    [mtlFilename]: fflate.strToU8(mtlContent),
+    'README.txt': fflate.strToU8(
+      `CADStudio 3D Viewer - OBJ + MTL Export\n` +
+      `-----------------------------------------\n` +
+      `このZIPを解凍し、${baseName}.obj をBlenderやWindows 3Dビューアー、各種CAD/CGソフトで開くと、各パーツのカラーが反映されます。\n`
+    ),
+  };
+
+  const zipped = fflate.zipSync(zipFiles);
+  return new Blob([zipped.buffer as ArrayBuffer], { type: 'application/zip' });
+}
+
+/**
+ * Export parts as individual STLs inside a ZIP archive.
+ * MULTI-COLOR 3D PRINTING: Allows slicers (Bambu Studio, PrusaSlicer, Cura, Orca) to assign
+ * different colors/filaments to each part easily.
+ */
+export async function exportToMultiPartSTLs(parts: CADPart[], options: ExportOptions): Promise<Blob> {
+  const { validParts } = buildExportScene(parts, options);
+  const baseName = (options.modelName || 'model').replace(/\.[^/.]+$/, '');
   const exporter = new STLExporter();
+  const zipFiles: Record<string, Uint8Array> = {};
 
-  if (binary) {
-    const result = exporter.parse(scene, { binary: true });
-    return new Blob([result.buffer as ArrayBuffer], { type: 'application/octet-stream' });
-  } else {
-    const result = exporter.parse(scene, { binary: false });
-    return new Blob([result], { type: 'text/plain' });
-  }
+  validParts.forEach((part, index) => {
+    const singleScene = new THREE.Scene();
+    const clonedGeo = part.mesh.geometry.clone();
+    if (!clonedGeo.attributes.normal) clonedGeo.computeVertexNormals();
+
+    const mesh = new THREE.Mesh(clonedGeo, new THREE.MeshBasicMaterial());
+    mesh.position.copy(part.originalPosition);
+    singleScene.add(mesh);
+
+    const stlData = exporter.parse(singleScene, { binary: true });
+    const partFilename = `${String(index + 1).padStart(2, '0')}_${safePartName(part.name, index)}.stl`;
+    zipFiles[partFilename] = new Uint8Array(stlData.buffer as ArrayBuffer);
+  });
+
+  // Add info readme
+  zipFiles['COLOR_REFERENCE.txt'] = fflate.strToU8(
+    `CADStudio 3D Viewer - 分割STLパーツ一覧と元カラー情報\n` +
+    `=======================================================\n` +
+    `スライサー（Bambu Studio, PrusaSlicer, Cura等）にドラッグ＆ドロップして\n` +
+    `「1つのマルチパーツオブジェクトとしてインポート」を選択すると、パーツごとに色を指定できます。\n\n` +
+    validParts
+      .map(
+        (p, idx) =>
+          `[${idx + 1}] ${p.name}\n` +
+          `    HEXカラー: #${p.color.getHexString().toUpperCase()}\n` +
+          `    RGB比率: (${p.color.r.toFixed(2)}, ${p.color.g.toFixed(2)}, ${p.color.b.toFixed(2)})\n`
+      )
+      .join('\n')
+  );
+
+  const zipped = fflate.zipSync(zipFiles);
+  return new Blob([zipped.buffer as ArrayBuffer], { type: 'application/zip' });
 }
 
 /**
- * Export parts to Wavefront OBJ format
- */
-export async function exportToOBJ(parts: CADPart[], options: ExportOptions): Promise<Blob> {
-  const scene = buildExportScene(parts, options);
-  const exporter = new OBJExporter();
-
-  const result = exporter.parse(scene);
-  return new Blob([result], { type: 'text/plain' });
-}
-
-/**
- * Export parts to PLY format (Binary or ASCII)
+ * Export parts to PLY format (Binary) with embedded Vertex Colors (RGB).
+ * FULL COLOR SUPPORT: Writes RGB vertex colors directly into PLY headers and body.
  */
 export async function exportToPLY(parts: CADPart[], options: ExportOptions, binary: boolean = true): Promise<Blob> {
-  const scene = buildExportScene(parts, options);
+  const { scene } = buildExportScene(parts, options);
   const exporter = new PLYExporter();
 
   return new Promise((resolve) => {
@@ -146,12 +324,29 @@ export async function exportToPLY(parts: CADPart[], options: ExportOptions, bina
 }
 
 /**
+ * Export parts to single STL format (Binary or ASCII)
+ * NOTE: Standard STL format does not support color by specification.
+ */
+export async function exportToSTL(parts: CADPart[], options: ExportOptions, binary: boolean = true): Promise<Blob> {
+  const { scene } = buildExportScene(parts, options);
+  const exporter = new STLExporter();
+
+  if (binary) {
+    const result = exporter.parse(scene, { binary: true });
+    return new Blob([result.buffer as ArrayBuffer], { type: 'application/octet-stream' });
+  } else {
+    const result = exporter.parse(scene, { binary: false });
+    return new Blob([result], { type: 'text/plain' });
+  }
+}
+
+/**
  * Export to a Single-File Self-Contained HTML 3D Viewer!
- * Contains Three.js, OrbitControls, and the model embedded as Base64.
+ * FULL COLOR SUPPORT: Contains Three.js, OrbitControls, and the model embedded as Base64.
  * Can be opened by double clicking anywhere offline with zero dependencies!
  */
 export async function exportToStandaloneHTML(parts: CADPart[], options: ExportOptions): Promise<Blob> {
-  // First generate clean uncompressed GLB
+  // First generate clean uncompressed GLB which retains all colors & materials
   const glbBlob = await exportToStandardGLB(parts, options);
   const arrayBuffer = await glbBlob.arrayBuffer();
 
@@ -192,7 +387,7 @@ export async function exportToStandaloneHTML(parts: CADPart[], options: ExportOp
 <body>
   <div class="header">
     <h1>⬡ ${escapeHtml(modelTitle)}</h1>
-    <span>オフライン対応 単体HTML 3Dビューアー</span>
+    <span>フルカラー対応 単体HTML 3Dビューアー</span>
   </div>
 
   <div class="toolbar">
@@ -206,10 +401,8 @@ export async function exportToStandaloneHTML(parts: CADPart[], options: ExportOp
   <div id="canvas-container"></div>
 
   <script>
-    // Embedded standard uncompressed GLB
     const glbBase64 = "${base64Data}";
 
-    // Setup scene
     const container = document.getElementById('canvas-container');
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x090d16);
@@ -247,7 +440,6 @@ export async function exportToStandaloneHTML(parts: CADPart[], options: ExportOp
     let wireframeMode = false;
     const meshes = [];
 
-    // Decode base64 to ArrayBuffer
     function base64ToArrayBuffer(base64) {
       const bin = window.atob(base64);
       const len = bin.length;
@@ -258,7 +450,6 @@ export async function exportToStandaloneHTML(parts: CADPart[], options: ExportOp
       return bytes.buffer;
     }
 
-    // Load model
     const loader = new THREE.GLTFLoader();
     const buffer = base64ToArrayBuffer(glbBase64);
 
@@ -288,14 +479,12 @@ export async function exportToStandaloneHTML(parts: CADPart[], options: ExportOp
       console.error('Error parsing GLB', err);
     });
 
-    // Resize
     window.addEventListener('resize', () => {
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
       renderer.setSize(window.innerWidth, window.innerHeight);
     });
 
-    // Animate
     function animate() {
       requestAnimationFrame(animate);
       controls.update();
@@ -306,7 +495,6 @@ export async function exportToStandaloneHTML(parts: CADPart[], options: ExportOp
     }
     animate();
 
-    // UI Buttons
     document.getElementById('btn-reset').addEventListener('click', () => {
       modelGroup.rotation.set(0, 0, 0);
       const box = new THREE.Box3().setFromObject(modelGroup);
@@ -361,7 +549,10 @@ function escapeHtml(str: string): string {
 /**
  * Universal export dispatcher
  */
-export async function exportCADModel(parts: CADPart[], options: ExportOptions): Promise<{ blob: Blob; filename: string }> {
+export async function exportCADModel(
+  parts: CADPart[],
+  options: ExportOptions
+): Promise<{ blob: Blob; filename: string }> {
   const baseName = (options.modelName || 'cad_model').replace(/\.[^/.]+$/, '');
   let blob: Blob;
   let filename = baseName;
@@ -372,6 +563,26 @@ export async function exportCADModel(parts: CADPart[], options: ExportOptions): 
       filename += '_standard.glb';
       break;
 
+    case 'html-viewer':
+      blob = await exportToStandaloneHTML(parts, options);
+      filename += '_viewer.html';
+      break;
+
+    case 'obj-mtl-zip':
+      blob = await exportToOBJWithMTL(parts, options);
+      filename += '_obj_with_colors.zip';
+      break;
+
+    case 'ply-binary':
+      blob = await exportToPLY(parts, options, true);
+      filename += '_color.ply';
+      break;
+
+    case 'stl-zip':
+      blob = await exportToMultiPartSTLs(parts, options);
+      filename += '_parts_stl.zip';
+      break;
+
     case 'stl-binary':
       blob = await exportToSTL(parts, options, true);
       filename += '.stl';
@@ -380,21 +591,6 @@ export async function exportCADModel(parts: CADPart[], options: ExportOptions): 
     case 'stl-ascii':
       blob = await exportToSTL(parts, options, false);
       filename += '_ascii.stl';
-      break;
-
-    case 'obj':
-      blob = await exportToOBJ(parts, options);
-      filename += '.obj';
-      break;
-
-    case 'ply-binary':
-      blob = await exportToPLY(parts, options, true);
-      filename += '.ply';
-      break;
-
-    case 'html-viewer':
-      blob = await exportToStandaloneHTML(parts, options);
-      filename += '_viewer.html';
       break;
 
     default:

@@ -117,13 +117,29 @@ export function extractPartsFromGLTF(gltf: any, sourceName: string): RawPartData
 
       let partColor: THREE.Color | undefined;
       const mat = mesh.material;
+      let preservedMat: THREE.Material | undefined;
+
       if (mat) {
-        if (Array.isArray(mat)) {
-          const firstMat = mat[0] as any;
-          if (firstMat?.color) partColor = firstMat.color.clone();
-        } else {
-          const singleMat = mat as any;
-          if (singleMat?.color) partColor = singleMat.color.clone();
+        const srcMat = Array.isArray(mat) ? mat[0] : mat;
+        if (srcMat) {
+          // Clone material to detach from GLTF scene lifecycle while preserving textures
+          preservedMat = srcMat.clone();
+          (preservedMat as any).side = THREE.DoubleSide;
+
+          // If material has texture map, ensure correct color space
+          if ((preservedMat as any).map) {
+            (preservedMat as any).map.colorSpace = THREE.SRGBColorSpace;
+            (preservedMat as any).map.needsUpdate = true;
+          }
+
+          // If geometry has vertex colors, enable vertexColors on material
+          if (clonedGeo.attributes.color) {
+            (preservedMat as any).vertexColors = true;
+          }
+
+          if ((srcMat as any).color) {
+            partColor = (srcMat as any).color.clone();
+          }
         }
       }
 
@@ -132,7 +148,7 @@ export function extractPartsFromGLTF(gltf: any, sourceName: string): RawPartData
         name: `${sourceName} - ${partName}`,
         geometry: clonedGeo,
         color: partColor,
-        material: Array.isArray(mat) ? mat[0]?.clone() : mat?.clone(),
+        material: preservedMat,
       });
       meshIndex++;
     }

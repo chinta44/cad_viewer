@@ -31,6 +31,7 @@ interface FormatInfo {
   ext: string;
   badge: string;
   badgeColor: string;
+  isColorSupported: boolean;
   description: string;
   whyUse: string;
   colorSupport: string;
@@ -43,11 +44,12 @@ const FORMATS: FormatInfo[] = [
     id: 'glb-uncompressed',
     title: '非圧縮 標準 GLB (Binary glTF)',
     ext: '.glb',
-    badge: 'おすすめ · 高互換',
+    badge: '★フルカラー · 高互換',
     badgeColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
+    isColorSupported: true,
     description: 'Dracoなどの特殊デコーダーが一切不要な、標準バイナリglTF。',
     whyUse: 'HTML単体アプリやWebビューアー、Windows 3Dビューアー、Office、Blender等で確実にそのまま開けます。圧縮GLBが開けない時の変換に最適！',
-    colorSupport: 'カラー・金属質感・パーツ階層を完全保持',
+    colorSupport: 'カラー・金属質感・パーツ階層を100%保持',
     precisionNote: '形状精度100%維持（寸法劣化なし）',
     icon: Box,
   },
@@ -55,8 +57,9 @@ const FORMATS: FormatInfo[] = [
     id: 'html-viewer',
     title: '自己完結型 HTML 3Dビューアー',
     ext: '.html',
-    badge: '配布・プレゼン用',
+    badge: '★フルカラー · 配布用',
     badgeColor: 'bg-sky-500/20 text-sky-300 border-sky-500/40',
+    isColorSupported: true,
     description: '3Dモデルとビューアーエンジンが1枚のHTMLファイルに完全に内蔵。',
     whyUse: 'ダブルクリックするだけでブラウザで誰でもオフライン起動！相手にアプリやライブラリのインストールを求めずに3Dモデルを見せられます。',
     colorSupport: 'カラー・パーツ階層・ライティング完全内蔵',
@@ -64,40 +67,56 @@ const FORMATS: FormatInfo[] = [
     icon: FileCode,
   },
   {
-    id: 'stl-binary',
-    title: 'STL 形式 (Binary)',
-    ext: '.stl',
-    badge: '3Dプリンター標準',
-    badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
-    description: 'スライサーソフト（Cura, Prusa, Bambu等）やCAMに直結する3Dプリント標準。',
-    whyUse: '3D造形・CAM切削・各種CADソフト間のメッシュ受け渡しに最も広く使われます。',
-    colorSupport: '単色（STL規格の仕様上カラー情報は含みません）',
-    precisionNote: '形状精度100%維持（頂点座標はそのまま出力）',
-    icon: Printer,
-  },
-  {
-    id: 'obj',
-    title: 'Wavefront OBJ',
-    ext: '.obj',
-    badge: 'CAD / CG 汎用',
+    id: 'obj-mtl-zip',
+    title: 'Wavefront OBJ + MTL (ZIP)',
+    ext: '.zip',
+    badge: '★フルカラー · CG汎用',
     badgeColor: 'bg-purple-500/20 text-purple-300 border-purple-500/40',
-    description: '歴史が最も長く、ほぼ全ての3D/CGソフトウェアで開ける普遍的な形式。',
-    whyUse: '古いビューアーや他のCAD/3DCGツールへの確実なデータインポートに役立ちます。',
-    colorSupport: 'メッシュ形状のみ（MTL非同梱時）',
+    isColorSupported: true,
+    description: '色情報定義ファイル（.mtl）とOBJメッシュを同梱したZIPアーカイブ。',
+    whyUse: 'BlenderやMaya、Windows 3Dビューアー等のCG/CADソフトで色付きのまま開けます。',
+    colorSupport: 'マテリアルカラー（Kd）をMTLで完全保持',
     precisionNote: '形状精度100%維持',
     icon: FileText,
   },
   {
     id: 'ply-binary',
-    title: 'PLY 形式 (Binary)',
+    title: 'カラー PLY 形式 (Binary)',
     ext: '.ply',
-    badge: '点群・解析用',
+    badge: '★フルカラー · 点群/解析',
     badgeColor: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40',
-    description: 'Polygon File Format。3Dスキャナーや学術・工学解析で多用されます。',
+    isColorSupported: true,
+    description: '各頂点にRGBカラーが焼き込まれたPolygon File Format。',
     whyUse: 'メッシュや頂点データをシンプルかつ厳密に保存・交換したい場合に適しています。',
-    colorSupport: '頂点カラー対応',
+    colorSupport: '頂点カラー (RGB) を完全保持',
     precisionNote: '形状精度100%維持',
     icon: Layers,
+  },
+  {
+    id: 'stl-zip',
+    title: 'パーツ別 STL 一括出力 (ZIP)',
+    ext: '.zip',
+    badge: 'パーツ別色分け可能',
+    badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
+    isColorSupported: false,
+    description: 'アセンブリのパーツごとに個別のSTLファイルを生成してまとめたZIP。',
+    whyUse: 'スライサーソフト（Bambu, Prusa, Cura等）でパーツごとに色や材料を割り当ててマルチカラー造形したい場合に最適！',
+    colorSupport: 'スライサー上でパーツごとに色指定可能',
+    precisionNote: '形状精度100%維持',
+    icon: Printer,
+  },
+  {
+    id: 'stl-binary',
+    title: 'STL 形式 (単一メッシュ)',
+    ext: '.stl',
+    badge: '3Dプリント/CAM標準',
+    badgeColor: 'bg-slate-500/20 text-slate-300 border-slate-500/40',
+    isColorSupported: false,
+    description: 'スライサーソフトやCAMに直結する3Dプリント標準。全パーツが1つに結合。',
+    whyUse: '単色の3D造形・CAM切削・各種CADソフト間のメッシュ受け渡しに最も広く使われます。',
+    colorSupport: '単色（STL規格の仕様上カラー情報は含みません）',
+    precisionNote: '形状精度100%維持（頂点座標はそのまま出力）',
+    icon: Printer,
   },
 ];
 
@@ -182,15 +201,28 @@ export const ExportModal: React.FC<ExportModalProps> = ({
 
         {/* Content */}
         <div className="p-6 overflow-y-auto space-y-5">
-          {/* Helpful callout about Compressed GLB */}
-          <div className="p-3.5 bg-sky-950/40 border border-sky-800/60 rounded-xl text-xs flex gap-3 text-sky-200">
-            <Info className="w-5 h-5 text-sky-400 shrink-0 mt-0.5" />
-            <div>
-              <strong className="text-white font-semibold">圧縮GLBでお困りの方へ:</strong>
-              <p className="mt-0.5 text-sky-300/90 leading-relaxed">
-                自作のHTMLや簡易ビューアーで「圧縮GLB」が表示できない場合、
-                <strong className="text-white">「非圧縮 標準 GLB」</strong>
-                に変換すると、Draco等の特殊デコーダーを必要とせず、あらゆるブラウザ・HTML単体で確実に表示できるようになります！
+          {/* Helpful callout about Color Retention & Compressed GLB */}
+          <div className="p-3.5 bg-gradient-to-r from-sky-950/50 to-indigo-950/40 border border-sky-800/60 rounded-xl text-xs space-y-2">
+            <div className="flex gap-2.5 text-sky-200">
+              <Sparkles className="w-4 h-4 text-sky-400 shrink-0 mt-0.5" />
+              <div>
+                <strong className="text-white font-semibold">カラー（色彩）をそのまま残したい場合:</strong>
+                <p className="mt-0.5 text-sky-300/90 leading-relaxed">
+                  <strong className="text-emerald-400">「非圧縮 標準 GLB」</strong>、
+                  <strong className="text-sky-300">「自己完結型 HTML」</strong>、
+                  <strong className="text-purple-300">「OBJ + MTL (ZIP)」</strong>、または
+                  <strong className="text-indigo-300">「カラー PLY」</strong>
+                  をお選びください。すべてのパーツ色やマテリアル質感が100%保持されます。
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2.5 text-slate-300 pt-1.5 border-t border-sky-900/60">
+              <Info className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+              <p className="text-[11px] text-slate-300 leading-relaxed">
+                <strong className="text-amber-300 font-semibold">※ STL形式について:</strong>{' '}
+                単一のSTL形式は規格自体の仕様上どのCADでも必ず「単色」になります。色分けしたマルチカラー造形を行いたい場合は
+                <strong className="text-amber-200">「パーツ別 STL (ZIP)」</strong>
+                を出力すると、スライサーソフト（Bambu Studio, Prusa, Cura等）上でパーツごとに別々の色を指定できます。
               </p>
             </div>
           </div>
@@ -236,8 +268,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                           <span className="text-emerald-400 font-medium">{fmt.precisionNote}</span>
                         </div>
                         <div className="bg-slate-900/40 px-2 py-1 rounded border border-slate-800 text-slate-300">
-                          <span className="text-slate-400 block text-[9px]">色彩・質感</span>
-                          <span className={fmt.id === 'stl-binary' ? 'text-amber-400 font-medium' : 'text-sky-300 font-medium'}>
+                          <span className="text-slate-400 block text-[9px]">色彩・カラー</span>
+                          <span className={fmt.isColorSupported ? 'text-emerald-400 font-semibold' : 'text-amber-400 font-medium'}>
                             {fmt.colorSupport}
                           </span>
                         </div>
@@ -290,7 +322,15 @@ export const ExportModal: React.FC<ExportModalProps> = ({
 
             <div className="text-[11px] text-slate-400 border-t border-slate-800/60 pt-2 flex items-center justify-between font-mono">
               <span>対象パーツ数: <strong className="text-white">{selectedOnly && selectedPart ? 1 : validParts.length}</strong> パーツ</span>
-              <span>推定出力ファイル名: <strong className="text-sky-300">{baseModelName}_{selectedFormat === 'glb-uncompressed' ? 'standard.glb' : selectedFormat === 'html-viewer' ? 'viewer.html' : selectedFormat.replace('-binary', '').replace('-ascii', '')}</strong></span>
+              <span>推定出力: <strong className="text-sky-300">
+                {selectedFormat === 'glb-uncompressed' && `${baseModelName}_standard.glb`}
+                {selectedFormat === 'html-viewer' && `${baseModelName}_viewer.html`}
+                {selectedFormat === 'obj-mtl-zip' && `${baseModelName}_obj_with_colors.zip`}
+                {selectedFormat === 'ply-binary' && `${baseModelName}_color.ply`}
+                {selectedFormat === 'stl-zip' && `${baseModelName}_parts_stl.zip`}
+                {selectedFormat === 'stl-binary' && `${baseModelName}.stl`}
+                {selectedFormat === 'stl-ascii' && `${baseModelName}_ascii.stl`}
+              </strong></span>
             </div>
           </div>
         </div>

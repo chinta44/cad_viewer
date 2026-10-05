@@ -580,15 +580,31 @@ export const CADViewer: React.FC<CADViewerProps> = ({
           clippingPlanes: planes,
         });
       } else {
-        // Default CAD PBR
-        mat = new THREE.MeshPhysicalMaterial({
-          color: baseColor,
-          roughness: 0.45,
-          metalness: 0.05,
-          clearcoat: 0.25,
-          side: THREE.DoubleSide,
-          clippingPlanes: planes,
-        });
+        // Default View Mode: Retain original material with textures & vertex colors!
+        if (p.originalMaterial) {
+          mat = p.originalMaterial.clone();
+          (mat as any).clippingPlanes = planes;
+          (mat as any).side = THREE.DoubleSide;
+
+          // If no texture map, allow custom part color change from inspector
+          if (!p.hasTexture && (mat as any).color) {
+            (mat as any).color.copy(baseColor);
+          }
+          if (p.hasVertexColors) {
+            (mat as any).vertexColors = true;
+          }
+        } else {
+          // Standard CAD PBR
+          mat = new THREE.MeshPhysicalMaterial({
+            color: baseColor,
+            roughness: 0.45,
+            metalness: 0.05,
+            clearcoat: 0.25,
+            side: THREE.DoubleSide,
+            clippingPlanes: planes,
+            vertexColors: Boolean(p.hasVertexColors),
+          });
+        }
       }
 
       // If Ghost mode

@@ -19,6 +19,9 @@ export interface CADPart {
   volumeMm3: number;
   boundingBox: THREE.Box3;
   isCompare?: boolean;
+  originalMaterial?: THREE.Material;
+  hasTexture?: boolean;
+  hasVertexColors?: boolean;
 }
 
 export interface ModelMetadata {

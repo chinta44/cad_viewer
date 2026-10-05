@@ -164,11 +164,28 @@ export default function App() {
         });
         const wireMesh = new THREE.LineSegments(wireGeo, wireMat);
 
-        // Solid Mesh
-        const mesh = new THREE.Mesh(
-          raw.geometry,
-          new THREE.MeshStandardMaterial({ color, roughness: 0.5 })
-        );
+        // Solid Mesh with texture & vertex color preservation
+        const hasTexture = Boolean((raw.material as any)?.map);
+        const hasVertexColors = Boolean(raw.geometry.attributes.color);
+
+        let solidMat: THREE.Material;
+        if (raw.material) {
+          solidMat = raw.material.clone();
+          (solidMat as any).side = THREE.DoubleSide;
+          if (hasVertexColors) {
+            (solidMat as any).vertexColors = true;
+          }
+        } else {
+          solidMat = new THREE.MeshStandardMaterial({
+            color,
+            roughness: 0.45,
+            metalness: 0.1,
+            side: THREE.DoubleSide,
+            vertexColors: hasVertexColors,
+          });
+        }
+
+        const mesh = new THREE.Mesh(raw.geometry, solidMat);
         mesh.castShadow = true;
         mesh.receiveShadow = true;
 
@@ -193,6 +210,9 @@ export default function App() {
           volumeMm3: vol,
           boundingBox: bbox,
           isCompare,
+          originalMaterial: solidMat.clone(),
+          hasTexture,
+          hasVertexColors,
         };
       });
     },
