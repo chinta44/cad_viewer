@@ -19,6 +19,7 @@ import { InspectorPanel } from './components/InspectorPanel';
 import { OrientationGizmo } from './components/OrientationGizmo';
 import { SampleModelModal } from './components/SampleModelModal';
 import { VideoExportModal } from './components/VideoExportModal';
+import { ExportModal } from './components/ExportModal';
 import { UploadCloud, CheckCircle2, AlertCircle, Loader2, Minimize2 } from 'lucide-react';
 
 export default function App() {
@@ -49,6 +50,9 @@ export default function App() {
   const [recordedVideoUrl, setRecordedVideoUrl] = useState<string | null>(null);
   const [recordedFileSize, setRecordedFileSize] = useState<number | null>(null);
   const [recordedFileName, setRecordedFileName] = useState<string>('cad_model_360.mp4');
+
+  // 3D Format Export & Conversion state
+  const [exportModalOpen, setExportModalOpen] = useState(false);
 
   // Section clipping
   const [clipAxis, setClipAxis] = useState<ClipAxis>('off');
@@ -501,12 +505,12 @@ export default function App() {
       idleTimerRef.current = null;
     }
 
-    if (isFullscreen && !sampleModalOpen && !videoModalOpen) {
+    if (isFullscreen && !sampleModalOpen && !videoModalOpen && !exportModalOpen) {
       idleTimerRef.current = setTimeout(() => {
         setIsIdle(true);
       }, 2500);
     }
-  }, [isFullscreen, sampleModalOpen, videoModalOpen]);
+  }, [isFullscreen, sampleModalOpen, videoModalOpen, exportModalOpen]);
 
   useEffect(() => {
     if (!isFullscreen) {
@@ -590,6 +594,7 @@ export default function App() {
           onOpenSample={() => setSampleModalOpen(true)}
           onScreenshot={() => screenshotRef.current?.()}
           onOpenVideoExport={() => setVideoModalOpen(true)}
+          onOpenExport={() => setExportModalOpen(true)}
           isFullscreen={isFullscreen}
           onToggleFullscreen={handleToggleFullscreen}
           onResetView={() => resetCameraRef.current?.()}
@@ -710,6 +715,7 @@ export default function App() {
         rotationSpeed={rotationSpeed}
         onSetRotationSpeed={setRotationSpeed}
         onOpenVideoExport={() => setVideoModalOpen(true)}
+        onOpenExport={() => setExportModalOpen(true)}
         isFullscreen={isFullscreen}
         isIdle={isIdle}
         onToggleFullscreen={handleToggleFullscreen}
@@ -756,6 +762,7 @@ export default function App() {
         hasCompareParts={hasCompareParts}
         onClearCompare={handleClearCompare}
         onAlignCompare={handleAlignCompare}
+        onOpenExport={() => setExportModalOpen(true)}
       />
 
       {/* Sample Model Modal */}
@@ -776,6 +783,16 @@ export default function App() {
         recordedVideoUrl={recordedVideoUrl}
         recordedFileSize={recordedFileSize}
         recordedFileName={recordedFileName}
+      />
+
+      {/* 3D Format Conversion & Export Modal */}
+      <ExportModal
+        isOpen={exportModalOpen}
+        onClose={() => setExportModalOpen(false)}
+        parts={parts}
+        metadata={metadata}
+        selectedPartId={selectedPartId}
+        onToast={showToast}
       />
 
       {/* Loading Overlay */}

@@ -13,7 +13,8 @@ import {
   Play,
   ChevronUp,
   Maximize2,
-  Minimize2
+  Minimize2,
+  Download
 } from 'lucide-react';
 import { ViewMode, MaterialPreset, ClipAxis, CameraView, PivotMode } from '../types/cad';
 
@@ -39,6 +40,7 @@ interface FloatingToolbarProps {
   rotationSpeed: number;
   onSetRotationSpeed: (speed: number) => void;
   onOpenVideoExport: () => void;
+  onOpenExport?: () => void;
   isFullscreen?: boolean;
   isIdle?: boolean;
   onToggleFullscreen?: () => void;
@@ -70,6 +72,7 @@ export const FloatingToolbar: React.FC<FloatingToolbarProps> = ({
   rotationSpeed,
   onSetRotationSpeed,
   onOpenVideoExport,
+  onOpenExport,
   isFullscreen = false,
   isIdle = false,
   onToggleFullscreen,
@@ -481,6 +484,18 @@ export const FloatingToolbar: React.FC<FloatingToolbarProps> = ({
           <Video className="w-4 h-4 text-rose-400" />
           <span className="hidden sm:inline">動画(MP4)</span>
         </button>
+
+        {/* 3D Format Conversion & Export Button */}
+        {onOpenExport && (
+          <button
+            onClick={onOpenExport}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/35 hover:border-emerald-500/60 transition-all cursor-pointer shadow-sm"
+            title="非圧縮GLB・STL・OBJ・単体HTML等に変換してエクスポート"
+          >
+            <Download className="w-4 h-4 text-emerald-400" />
+            <span className="hidden sm:inline">変換・保存</span>
+          </button>
+        )}
 
         {/* Pivot reset button */}
         <button

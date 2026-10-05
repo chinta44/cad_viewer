@@ -9,7 +9,8 @@ import {
   Sparkles,
   GitCompare,
   RotateCcw,
-  Video
+  Video,
+  Download
 } from 'lucide-react';
 import { ModelMetadata } from '../types/cad';
 import { formatMm } from '../utils/cadMath';
@@ -21,6 +22,7 @@ interface TopBarProps {
   onOpenSample: () => void;
   onScreenshot: () => void;
   onOpenVideoExport?: () => void;
+  onOpenExport?: () => void;
   isFullscreen?: boolean;
   onToggleFullscreen: () => void;
   onResetView: () => void;
@@ -35,6 +37,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   onOpenSample,
   onScreenshot,
   onOpenVideoExport,
+  onOpenExport,
   isFullscreen = false,
   onToggleFullscreen,
   onResetView,
@@ -138,6 +141,17 @@ export const TopBar: React.FC<TopBarProps> = ({
           >
             <Video className="w-4 h-4 text-rose-400" />
             <span className="hidden md:inline font-semibold">360°動画</span>
+          </button>
+        )}
+
+        {onOpenExport && (
+          <button
+            onClick={onOpenExport}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-emerald-300 hover:text-white bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/35 rounded-lg transition-colors cursor-pointer shadow-sm"
+            title="3Dモデルを非圧縮GLB・STL・OBJ・単体HTML等に変換してダウンロード"
+          >
+            <Download className="w-4 h-4 text-emerald-400" />
+            <span className="hidden sm:inline">変換・保存</span>
           </button>
         )}
 

@@ -15,7 +15,8 @@ import {
   Sun,
   ShieldAlert,
   GitCompare,
-  RotateCcw
+  RotateCcw,
+  Download
 } from 'lucide-react';
 import { CADPart, ModelMetadata, MATERIAL_DENSITIES, PivotMode } from '../types/cad';
 import { formatMm, formatGrams } from '../utils/cadMath';
@@ -50,6 +51,7 @@ interface InspectorPanelProps {
   hasCompareParts: boolean;
   onClearCompare: () => void;
   onAlignCompare: () => void;
+  onOpenExport?: () => void;
 }
 
 export const InspectorPanel: React.FC<InspectorPanelProps> = ({
@@ -82,6 +84,7 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
   hasCompareParts,
   onClearCompare,
   onAlignCompare,
+  onOpenExport,
 }) => {
   const [activeTab, setActiveTab] = useState<'parts' | 'props' | 'settings'>('parts');
 
@@ -184,6 +187,30 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
                 )}
               </div>
             </div>
+
+            {/* Quick Export / Convert Button */}
+            {onOpenExport && parts.length > 0 && (
+              <button
+                onClick={onOpenExport}
+                className="w-full flex items-center justify-between p-2.5 rounded-xl bg-gradient-to-r from-sky-500/15 to-emerald-500/15 border border-sky-500/35 hover:border-sky-500/60 transition-all text-xs cursor-pointer group"
+                title="非圧縮GLB・STL・OBJ・単体HTML等に変換してダウンロード"
+              >
+                <div className="flex items-center gap-2">
+                  <div className="p-1 rounded-lg bg-sky-500/20 text-sky-300 group-hover:scale-110 transition-transform">
+                    <Download className="w-3.5 h-3.5" />
+                  </div>
+                  <div className="text-left">
+                    <div className="font-bold text-slate-200 group-hover:text-white flex items-center gap-1.5">
+                      3Dデータ形式を変換・保存
+                    </div>
+                    <div className="text-[10px] text-slate-400">非圧縮GLB / STL / OBJ / 単体HTML</div>
+                  </div>
+                </div>
+                <span className="text-[10px] font-semibold text-sky-400 bg-sky-500/10 px-2 py-0.5 rounded border border-sky-500/20">
+                  変換
+                </span>
+              </button>
+            )}
 
             {parts.length === 0 ? (
               <div className="p-6 text-center text-xs text-slate-500 border border-dashed border-slate-800 rounded-xl">
