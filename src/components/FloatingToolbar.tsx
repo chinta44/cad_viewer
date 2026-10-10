@@ -172,26 +172,35 @@ export const FloatingToolbar: React.FC<FloatingToolbarProps> = ({
               <div className="grid grid-cols-2 gap-1.5">
                 {[
                   { id: 'normal' as MaterialPreset, label: '標準 CAD PBR' },
+                  { id: 'hologram' as MaterialPreset, label: '✨ ホログラム (発光)' },
                   { id: 'clay' as MaterialPreset, label: 'マット・クレイ' },
                   { id: 'metal' as MaterialPreset, label: '金属 (メタリック)' },
                   { id: 'glass' as MaterialPreset, label: 'ガラス (半透明)' },
                   { id: 'normalColors' as MaterialPreset, label: '法線マップ (Normal)' },
-                ].map((mat) => (
-                  <button
-                    key={mat.id}
-                    onClick={() => {
-                      onSetMaterialPreset(mat.id);
-                      setActiveMenu(null);
-                    }}
-                    className={`px-3 py-2 rounded-xl border transition-colors text-center font-medium cursor-pointer ${
-                      materialPreset === mat.id
-                        ? 'bg-sky-500/20 border-sky-500/60 text-sky-200'
-                        : 'bg-slate-800/50 border-slate-700/50 hover:bg-slate-800 text-slate-300'
-                    }`}
-                  >
-                    {mat.label}
-                  </button>
-                ))}
+                ].map((mat) => {
+                  const isHolo = mat.id === 'hologram';
+                  const isSelected = materialPreset === mat.id;
+                  return (
+                    <button
+                      key={mat.id}
+                      onClick={() => {
+                        onSetMaterialPreset(mat.id);
+                        setActiveMenu(null);
+                      }}
+                      className={`px-3 py-2 rounded-xl border transition-all text-center font-medium cursor-pointer ${
+                        isSelected
+                          ? isHolo
+                            ? 'bg-gradient-to-r from-cyan-500/30 via-sky-500/30 to-purple-500/30 border-cyan-400 text-cyan-100 shadow-md shadow-cyan-500/30 ring-1 ring-cyan-400'
+                            : 'bg-sky-500/20 border-sky-500/60 text-sky-200'
+                          : isHolo
+                          ? 'bg-cyan-950/40 border-cyan-800/60 hover:border-cyan-500/60 hover:bg-cyan-900/40 text-cyan-300'
+                          : 'bg-slate-800/50 border-slate-700/50 hover:bg-slate-800 text-slate-300'
+                      }`}
+                    >
+                      {mat.label}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -377,12 +386,16 @@ export const FloatingToolbar: React.FC<FloatingToolbarProps> = ({
         {/* Shading/Material button */}
         <button
           onClick={() => toggleMenu('material')}
-          className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-medium transition-colors cursor-pointer ${
-            activeMenu === 'material' ? 'bg-sky-500 text-white' : 'hover:bg-slate-800 text-slate-300'
+          className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-medium transition-all cursor-pointer ${
+            materialPreset === 'hologram'
+              ? 'bg-gradient-to-r from-cyan-500/30 to-purple-500/30 text-cyan-200 border border-cyan-400 shadow-md shadow-cyan-500/20'
+              : activeMenu === 'material'
+              ? 'bg-sky-500 text-white'
+              : 'hover:bg-slate-800 text-slate-300'
           }`}
-          title="マテリアル質感プリセット"
+          title="マテリアル質感プリセット（ホログラム・金属・ガラス等）"
         >
-          <Sparkles className="w-4 h-4" />
+          <Sparkles className={`w-4 h-4 ${materialPreset === 'hologram' ? 'text-cyan-300 animate-pulse' : ''}`} />
           <span className="hidden md:inline">質感</span>
         </button>
 

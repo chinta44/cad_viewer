@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 export type ViewMode = 'solid' | 'wire' | 'both' | 'ghost';
-export type MaterialPreset = 'normal' | 'metal' | 'glass' | 'clay' | 'normalColors';
+export type MaterialPreset = 'normal' | 'metal' | 'glass' | 'clay' | 'normalColors' | 'hologram';
 export type ClipAxis = 'off' | 'x' | 'y' | 'z';
 export type CameraView = 'iso' | 'front' | 'back' | 'top' | 'bottom' | 'left' | 'right';
 export type PivotMode = 'center' | 'origin' | 'custom';

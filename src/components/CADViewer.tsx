@@ -50,6 +50,111 @@ interface CADViewerProps {
   isIdle?: boolean;
 }
 
+// Custom Tripo-Style Hologram Shader: Smooth Ascending Organic Wave with Crisp Shape Lighting
+function createHologramMaterial(
+  waveScale: number = 0.05,
+  planes: THREE.Plane[] = []
+): THREE.ShaderMaterial {
+  return new THREE.ShaderMaterial({
+    uniforms: {
+      uTime: { value: 0 },
+      uColor: { value: new THREE.Color(0x00f5ff) }, // Vivid Plasma Cyan
+      uBaseColor: { value: new THREE.Color(0x051428) }, // Deep Midnight Navy
+      uMidColor: { value: new THREE.Color(0x0369a1) }, // Cobalt Shading
+      uPeakColor: { value: new THREE.Color(0xe879f9) }, // Violet/Magenta Wave Crest
+      uWaveScale: { value: waveScale },
+    },
+    vertexShader: `
+      varying vec3 vWorldPosition;
+      varying vec3 vNormal;
+      varying vec3 vViewPosition;
+
+      void main() {
+        vec4 worldPos = modelMatrix * vec4(position, 1.0);
+        vWorldPosition = worldPos.xyz;
+        vNormal = normalize(normalMatrix * normal);
+        vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+        vViewPosition = -mvPosition.xyz;
+        gl_Position = projectionMatrix * mvPosition;
+      }
+    `,
+    fragmentShader: `
+      uniform float uTime;
+      uniform vec3 uColor;
+      uniform vec3 uBaseColor;
+      uniform vec3 uMidColor;
+      uniform vec3 uPeakColor;
+      uniform float uWaveScale;
+
+      varying vec3 vWorldPosition;
+      varying vec3 vNormal;
+      varying vec3 vViewPosition;
+
+      void main() {
+        vec3 normal = normalize(vNormal);
+        if (!gl_FrontFacing) normal = -normal;
+
+        vec3 viewDir = normalize(vViewPosition);
+
+        // 1. CLEAR LIGHTING TO REVEAL CRISP MODEL SHAPE AND DETAILS
+        vec3 keyLight = normalize(vec3(0.5, 0.85, 0.65));
+        vec3 fillLight = normalize(vec3(-0.6, 0.35, -0.5));
+
+        float NdotKey = max(dot(normal, keyLight), 0.0);
+        float NdotFill = max(dot(normal, fillLight), 0.0);
+        float diffuse = NdotKey * 0.65 + NdotFill * 0.25 + 0.20; // clear soft ambient
+
+        // Specular highlight to define sharp facial features & fabric folds
+        vec3 halfVec = normalize(keyLight + viewDir);
+        float spec = pow(max(dot(normal, halfVec), 0.0), 28.0) * 0.70;
+
+        // 2. SMOOTH ASCENDING ORGANIC WAVE (下から上へウェイブする光の波)
+        // Gentle organic curvature across X/Z so the wave feels like fluid plasma rather than a flat line
+        float waveWarp = sin(vWorldPosition.x * (uWaveScale * 2.2) + uTime * 1.4) * 0.12
+                       + cos(vWorldPosition.z * (uWaveScale * 2.2) + uTime * 1.1) * 0.12;
+
+        // Continuous ascending phase moving from bottom to top
+        float wavePhase = vWorldPosition.y * uWaveScale + waveWarp - uTime * 1.8;
+
+        // Primary bell-curve wave band flowing upwards
+        float primaryWave = pow(sin(wavePhase * 3.14159) * 0.5 + 0.5, 3.2);
+
+        // Secondary subtle harmonic ripple
+        float secondaryWave = pow(sin(wavePhase * 6.28318 + 1.2) * 0.5 + 0.5, 5.0) * 0.35;
+        float totalWave = clamp(primaryWave + secondaryWave, 0.0, 1.0);
+
+        // 3. FRESNEL SILHOUETTE GLOW
+        float dotNV = clamp(dot(normal, viewDir), 0.0, 1.0);
+        float fresnel = pow(1.0 - dotNV, 2.4);
+
+        // 4. COLOR COMPOSITION (Crisp clean base + Upward ascending wave glow)
+        // Shaded base: Consistent, unified, highly readable model geometry
+        vec3 surfaceBase = mix(uBaseColor, uMidColor, diffuse);
+
+        // Wave crest energy: Cyan on main wave, with neon magenta sparkle on wave edge & silhouette
+        vec3 waveEnergy = mix(uColor, uPeakColor, totalWave * 0.4 + fresnel * 0.6);
+
+        // Final Composite: Solid readable shape + glowing ascending wave + rim light + specularity
+        vec3 finalColor = surfaceBase * 0.82
+                        + waveEnergy * (totalWave * 1.65)
+                        + uColor * (fresnel * 1.25)
+                        + vec3(1.0, 1.0, 1.0) * spec * (0.6 + totalWave * 0.4);
+
+        // Subtle energy heartbeat pulse
+        float pulse = sin(uTime * 2.0) * 0.05 + 0.95;
+        finalColor *= pulse;
+
+        gl_FragColor = vec4(finalColor, 0.97);
+      }
+    `,
+    transparent: true,
+    depthWrite: true,
+    depthTest: true,
+    side: THREE.DoubleSide,
+    clippingPlanes: planes,
+  });
+}
+
 export const CADViewer: React.FC<CADViewerProps> = ({
   parts,
   viewMode,
@@ -170,6 +275,9 @@ export const CADViewer: React.FC<CADViewerProps> = ({
 
   // Delta time clock for frame-rate-independent smooth rotation
   const clockRef = useRef<THREE.Clock>(new THREE.Clock());
+
+  // Hologram active shader materials for continuous animation updates
+  const hologramMaterialsRef = useRef<THREE.ShaderMaterial[]>([]);
 
   // -------------------------------------------------------------
   // INITIALIZE THREE.JS ENGINE
@@ -337,6 +445,15 @@ export const CADViewer: React.FC<CADViewerProps> = ({
         setMeasureScreenPos({
           x: projected.x * halfWidth + halfWidth,
           y: -projected.y * halfHeight + halfHeight,
+        });
+      }
+
+      // Update Hologram animated shader uniforms
+      if (hologramMaterialsRef.current.length > 0) {
+        hologramMaterialsRef.current.forEach((mat) => {
+          if (mat.uniforms?.uTime) {
+            mat.uniforms.uTime.value += delta;
+          }
         });
       }
 
@@ -533,6 +650,10 @@ export const CADViewer: React.FC<CADViewerProps> = ({
   // -------------------------------------------------------------
   useEffect(() => {
     const planes = clipAxis === 'off' ? [] : [clipPlaneRef.current];
+    const activeHoloMats: THREE.ShaderMaterial[] = [];
+    const modelHeight = Math.max(boundsSizeRef.current.y, 1.0);
+    // Dynamic wave scale adapted to bounding box height for smooth ascending waves (2-3 waves along model height)
+    const waveScale = (2.2 * Math.PI) / modelHeight;
 
     parts.forEach((p) => {
       const isSelected = selectedPartId === p.id;
@@ -549,6 +670,10 @@ export const CADViewer: React.FC<CADViewerProps> = ({
           depthWrite: false,
           clippingPlanes: planes,
         });
+      } else if (materialPreset === 'hologram') {
+        const holoMat = createHologramMaterial(waveScale, planes);
+        activeHoloMats.push(holoMat);
+        mat = holoMat;
       } else if (materialPreset === 'clay') {
         mat = new THREE.MeshStandardMaterial({
           color: 0xe2e8f0,
@@ -608,7 +733,7 @@ export const CADViewer: React.FC<CADViewerProps> = ({
       }
 
       // If Ghost mode
-      if (viewMode === 'ghost') {
+      if (viewMode === 'ghost' && materialPreset !== 'hologram') {
         mat.transparent = true;
         mat.opacity = 0.25;
         mat.depthWrite = false;
@@ -616,8 +741,13 @@ export const CADViewer: React.FC<CADViewerProps> = ({
 
       // If Selected Part
       if (isSelected) {
-        (mat as any).emissive = new THREE.Color(0x38bdf8);
-        (mat as any).emissiveIntensity = 0.25;
+        if (materialPreset === 'hologram' && (mat as any).uniforms) {
+          (mat as any).uniforms.uColor.value = new THREE.Color(0xffffff);
+          (mat as any).uniforms.uPeakColor.value = new THREE.Color(0x38bdf8);
+        } else {
+          (mat as any).emissive = new THREE.Color(0x38bdf8);
+          (mat as any).emissiveIntensity = 0.25;
+        }
       }
 
       p.mesh.material = mat;
@@ -631,6 +761,8 @@ export const CADViewer: React.FC<CADViewerProps> = ({
         p.wireMesh.visible = viewMode === 'wire' || viewMode === 'both';
       }
     });
+
+    hologramMaterialsRef.current = activeHoloMats;
   }, [parts, viewMode, materialPreset, clipAxis, selectedPartId]);
 
   // -------------------------------------------------------------
