@@ -8,7 +8,8 @@ import {
   ClipAxis,
   CameraView,
   PivotMode,
-  MeasureResult
+  MeasureResult,
+  ExplodeDirection
 } from '../types/cad';
 import { formatMm } from '../utils/cadMath';
 import { Box, Ruler, CheckCircle2, Crosshair, Sparkles } from 'lucide-react';
@@ -21,6 +22,7 @@ interface CADViewerProps {
   clipPosition: number;
   clipInverted: boolean;
   explodeFactor: number;
+  explodeDirection?: ExplodeDirection;
   isMeasuring: boolean;
   onMeasureComplete: (res: MeasureResult) => void;
   onClearMeasureRef?: (clearFn: () => void) => void;
@@ -163,6 +165,7 @@ export const CADViewer: React.FC<CADViewerProps> = ({
   clipPosition,
   clipInverted,
   explodeFactor,
+  explodeDirection = 'radial',
   isMeasuring,
   onMeasureComplete,
   onClearMeasureRef,
@@ -808,19 +811,74 @@ export const CADViewer: React.FC<CADViewerProps> = ({
   // EXPLODE VIEW
   // -------------------------------------------------------------
   useEffect(() => {
-    parts.forEach((p) => {
-      const orig = p.originalPosition;
-      // Normal vector from center
-      let dir = orig.clone().normalize();
-      if (dir.length() < 0.001) dir.set(0, 1, 0);
+    if (parts.length === 0) return;
 
-      const offsetDist = explodeFactor * (boundsSizeRef.current.length() * 0.4);
-      const newPos = orig.clone().addScaledVector(dir, offsetDist);
+    if (explodeFactor <= 0.0001) {
+      // Snap back cleanly to original rest position
+      parts.forEach((p) => {
+        p.mesh.position.copy(p.originalPosition);
+        p.wireMesh.position.copy(p.originalPosition);
+      });
+      return;
+    }
 
+    const modelCenter = boundsCenterRef.current;
+    const modelDiagonal = Math.max(boundsSizeRef.current.length(), 1.0);
+    const nonCompareParts = parts.filter((p) => !p.isCompare);
+    const totalParts = Math.max(nonCompareParts.length, 1);
+
+    parts.forEach((p, index) => {
+      if (p.isCompare) return;
+
+      // Calculate part's actual geometric centroid from bounding box
+      const partCenter = new THREE.Vector3();
+      p.boundingBox.getCenter(partCenter);
+
+      // Delta vector from model assembly center to part center
+      const delta = partCenter.clone().sub(modelCenter);
+      let dir = new THREE.Vector3();
+
+      if (explodeDirection === 'vertical') {
+        // Vertical Y-axis separation (e.g. head up, base down)
+        const sign = delta.y >= 0 ? 1 : -1;
+        const normalizedY = Math.abs(delta.y) / (boundsSizeRef.current.y * 0.5 || 1);
+        dir.set(0, sign * Math.max(0.4, normalizedY), 0);
+      } else if (explodeDirection === 'horizontal') {
+        // Horizontal XZ-plane separation (radial outwards in horizontal plane)
+        const xzDelta = new THREE.Vector3(delta.x, 0, delta.z);
+        if (xzDelta.length() > modelDiagonal * 0.02) {
+          dir.copy(xzDelta).normalize();
+        } else {
+          // If on the central vertical axis, disperse in circle by index
+          const angle = (index / totalParts) * Math.PI * 2;
+          dir.set(Math.cos(angle), 0, Math.sin(angle));
+        }
+      } else {
+        // Default 'radial' (3D Spherical separation in true part direction)
+        if (delta.length() > modelDiagonal * 0.02) {
+          dir.copy(delta).normalize();
+        } else {
+          // Centered parts disperse smoothly along golden spiral sphere
+          const phi = Math.acos(1 - (2 * (index + 0.5)) / totalParts);
+          const theta = Math.PI * (1 + Math.sqrt(5)) * index;
+          dir.set(
+            Math.sin(phi) * Math.cos(theta),
+            Math.cos(phi),
+            Math.sin(phi) * Math.sin(theta)
+          ).normalize();
+        }
+      }
+
+      // Proportional travel distance so outer parts clear inner parts naturally
+      const distFromCenter = delta.length();
+      const distanceMultiplier = 0.65 + (distFromCenter / modelDiagonal) * 0.7;
+      const travelDist = explodeFactor * (modelDiagonal * 0.5) * distanceMultiplier;
+
+      const newPos = p.originalPosition.clone().addScaledVector(dir, travelDist);
       p.mesh.position.copy(newPos);
       p.wireMesh.position.copy(newPos);
     });
-  }, [explodeFactor, parts]);
+  }, [explodeFactor, explodeDirection, parts]);
 
   // -------------------------------------------------------------
   // CAMERA VIEW & CENTERING METHODS

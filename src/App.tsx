@@ -8,7 +8,8 @@ import {
   CameraView,
   PivotMode,
   ModelMetadata,
-  MeasureResult
+  MeasureResult,
+  ExplodeDirection
 } from './types/cad';
 import { computeGeometryVolume, formatMm } from './utils/cadMath';
 import { parseCADFile, generateSampleModel, RawPartData } from './utils/cadLoaders';
@@ -61,6 +62,7 @@ export default function App() {
 
   // Explode view
   const [explodeFactor, setExplodeFactor] = useState<number>(0);
+  const [explodeDirection, setExplodeDirection] = useState<ExplodeDirection>('radial');
 
   // Measurement
   const [isMeasuring, setIsMeasuring] = useState<boolean>(false);
@@ -653,6 +655,7 @@ export default function App() {
         clipPosition={clipPosition}
         clipInverted={clipInverted}
         explodeFactor={explodeFactor}
+        explodeDirection={explodeDirection}
         isMeasuring={isMeasuring}
         onMeasureComplete={(res) => {
           setHasMeasurePoints(true);
@@ -718,6 +721,8 @@ export default function App() {
         onToggleClipInverted={() => setClipInverted((prev) => !prev)}
         explodeFactor={explodeFactor}
         onSetExplodeFactor={setExplodeFactor}
+        explodeDirection={explodeDirection}
+        onSetExplodeDirection={setExplodeDirection}
         isMeasuring={isMeasuring}
         onToggleMeasuring={() => {
           setIsMeasuring((prev) => !prev);

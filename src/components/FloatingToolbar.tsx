@@ -16,7 +16,7 @@ import {
   Minimize2,
   Download
 } from 'lucide-react';
-import { ViewMode, MaterialPreset, ClipAxis, CameraView, PivotMode } from '../types/cad';
+import { ViewMode, MaterialPreset, ClipAxis, CameraView, PivotMode, ExplodeDirection } from '../types/cad';
 
 interface FloatingToolbarProps {
   viewMode: ViewMode;
@@ -31,6 +31,8 @@ interface FloatingToolbarProps {
   onToggleClipInverted: () => void;
   explodeFactor: number;
   onSetExplodeFactor: (factor: number) => void;
+  explodeDirection?: ExplodeDirection;
+  onSetExplodeDirection?: (dir: ExplodeDirection) => void;
   isMeasuring: boolean;
   onToggleMeasuring: () => void;
   onClearMeasure: () => void;
@@ -63,6 +65,8 @@ export const FloatingToolbar: React.FC<FloatingToolbarProps> = ({
   onToggleClipInverted,
   explodeFactor,
   onSetExplodeFactor,
+  explodeDirection = 'radial',
+  onSetExplodeDirection,
   isMeasuring,
   onToggleMeasuring,
   onClearMeasure,
@@ -271,25 +275,61 @@ export const FloatingToolbar: React.FC<FloatingToolbarProps> = ({
 
           {/* Explode Menu */}
           {activeMenu === 'explode' && (
-            <div className="w-[260px]">
-              <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2 flex items-center justify-between">
-                <span>分解ビュー (Explode)</span>
-                <span className="font-mono text-sky-400 font-bold">
-                  {Math.round(explodeFactor * 100)}%
-                </span>
+            <div className="w-[270px] space-y-3">
+              <div>
+                <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2 flex items-center justify-between">
+                  <span>分解展開 (Explode)</span>
+                  <div className="flex items-center gap-1.5">
+                    {explodeFactor > 0 && (
+                      <button
+                        onClick={() => onSetExplodeFactor(0)}
+                        className="text-[10px] text-sky-400 hover:text-sky-300 px-1.5 py-0.5 rounded bg-sky-500/10 hover:bg-sky-500/20 transition-colors cursor-pointer"
+                      >
+                        リセット
+                      </button>
+                    )}
+                    <span className="font-mono text-sky-400 font-bold">
+                      {Math.round(explodeFactor * 100)}%
+                    </span>
+                  </div>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="2"
+                  step="0.01"
+                  value={explodeFactor}
+                  onChange={(e) => onSetExplodeFactor(parseFloat(e.target.value))}
+                  className="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-sky-400"
+                />
+                <div className="flex justify-between text-[10px] text-slate-500 mt-1">
+                  <span>組立 (0%)</span>
+                  <span>最大展開 (200%)</span>
+                </div>
               </div>
-              <input
-                type="range"
-                min="0"
-                max="2"
-                step="0.01"
-                value={explodeFactor}
-                onChange={(e) => onSetExplodeFactor(parseFloat(e.target.value))}
-                className="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-sky-400"
-              />
-              <div className="flex justify-between text-[10px] text-slate-500 mt-1">
-                <span>通常 (0%)</span>
-                <span>最大展開 (200%)</span>
+
+              {/* Explode Direction Selector */}
+              <div className="pt-2 border-t border-slate-800">
+                <span className="text-[10px] text-slate-400 block mb-1.5 font-medium">展開方向</span>
+                <div className="grid grid-cols-3 gap-1">
+                  {[
+                    { id: 'radial' as ExplodeDirection, label: '放射状 (3D)' },
+                    { id: 'vertical' as ExplodeDirection, label: '上下 (Y軸)' },
+                    { id: 'horizontal' as ExplodeDirection, label: '水平 (XZ)' },
+                  ].map((d) => (
+                    <button
+                      key={d.id}
+                      onClick={() => onSetExplodeDirection?.(d.id)}
+                      className={`py-1.5 px-1 rounded-lg text-[10px] border text-center transition-all cursor-pointer ${
+                        explodeDirection === d.id
+                          ? 'bg-sky-500/20 text-sky-300 border-sky-500/60 font-bold shadow-sm'
+                          : 'bg-slate-950/40 border-slate-800 hover:bg-slate-800 text-slate-400'
+                      }`}
+                    >
+                      {d.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           )}

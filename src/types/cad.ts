@@ -5,6 +5,7 @@ export type MaterialPreset = 'normal' | 'metal' | 'glass' | 'clay' | 'normalColo
 export type ClipAxis = 'off' | 'x' | 'y' | 'z';
 export type CameraView = 'iso' | 'front' | 'back' | 'top' | 'bottom' | 'left' | 'right';
 export type PivotMode = 'center' | 'origin' | 'custom';
+export type ExplodeDirection = 'radial' | 'vertical' | 'horizontal';
 
 export interface CADPart {
   id: string;
