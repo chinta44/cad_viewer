@@ -115,7 +115,9 @@ export const OrientationGizmo: React.FC<OrientationGizmoProps> = ({
   return (
     <div
       className={`absolute z-20 flex flex-col items-center select-none pointer-events-auto transition-all duration-300 ${
-        isFullscreen ? 'top-14 right-4' : 'top-16 right-4'
+        isFullscreen
+          ? 'top-[68px] right-3 sm:top-14 sm:right-4'
+          : 'top-[116px] right-3 sm:top-16 sm:right-4'
       } ${
         isFullscreen && isIdle
           ? 'opacity-0 pointer-events-none translate-x-3'

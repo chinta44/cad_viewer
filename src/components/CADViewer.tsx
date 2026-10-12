@@ -1313,17 +1313,18 @@ export const CADViewer: React.FC<CADViewerProps> = ({
       {/* Floating XYZ Model Dimensions HUD (Top-Left) */}
       {boundsSizeRef.current && parts.length > 0 && boundsSizeRef.current.length() > 0 && (
         <div
-          className={`absolute left-4 z-20 pointer-events-auto flex items-center gap-2 select-none transition-all duration-300 ${
-            isFullscreen ? 'top-4' : 'top-16'
+          className={`absolute left-3 sm:left-4 z-20 pointer-events-auto flex items-center gap-2 select-none transition-all duration-300 max-w-[calc(100vw-1.5rem)] sm:max-w-[calc(100vw-130px)] ${
+            isFullscreen ? 'top-3 sm:top-4' : 'top-16'
           } ${isFullscreen && isIdle ? 'opacity-0 pointer-events-none -translate-y-2' : 'opacity-100'}`}
         >
-          <div className="bg-slate-900/90 backdrop-blur-xl border border-slate-700/80 rounded-xl px-3 py-2 shadow-2xl flex items-center gap-3 text-xs">
-            <div className="flex items-center gap-1.5 font-bold text-slate-200">
+          <div className="bg-slate-900/90 backdrop-blur-xl border border-slate-700/80 rounded-xl px-2.5 sm:px-3 py-1.5 sm:py-2 shadow-2xl flex items-center gap-2 sm:gap-3 text-xs overflow-x-auto scrollbar-none">
+            <div className="flex items-center gap-1.5 font-bold text-slate-200 shrink-0">
               <Box className="w-3.5 h-3.5 text-sky-400" />
-              <span>外形サイズ</span>
+              <span className="hidden xs:inline">外形サイズ</span>
+              <span className="xs:hidden">外形</span>
             </div>
-            <div className="h-3.5 w-px bg-slate-700/80" />
-            <div className="flex items-center gap-3 font-mono text-[11px] tabular-nums">
+            <div className="h-3.5 w-px bg-slate-700/80 shrink-0" />
+            <div className="flex items-center gap-2.5 sm:gap-3 font-mono text-[11px] tabular-nums shrink-0">
               <span className="text-slate-300 flex items-center gap-1">
                 <span className="w-2 h-2 rounded-full bg-rose-500 inline-block" />
                 <span className="text-rose-400 font-bold">X:</span> {formatMm(boundsSizeRef.current.x)} mm
