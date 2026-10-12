@@ -615,7 +615,6 @@ export default function App() {
           onOpenCompare={() => compareInputRef.current?.click()}
           onOpenSample={() => setSampleModalOpen(true)}
           onScreenshot={() => screenshotRef.current?.()}
-          onOpenVideoExport={() => setVideoModalOpen(true)}
           onOpenExport={() => setExportModalOpen(true)}
           isFullscreen={isFullscreen}
           onToggleFullscreen={handleToggleFullscreen}
@@ -723,6 +722,7 @@ export default function App() {
         onSetExplodeFactor={setExplodeFactor}
         explodeDirection={explodeDirection}
         onSetExplodeDirection={setExplodeDirection}
+        partCount={parts.filter((p) => !p.isCompare).length}
         isMeasuring={isMeasuring}
         onToggleMeasuring={() => {
           setIsMeasuring((prev) => !prev);
@@ -740,7 +740,6 @@ export default function App() {
         rotationSpeed={rotationSpeed}
         onSetRotationSpeed={setRotationSpeed}
         onOpenVideoExport={() => setVideoModalOpen(true)}
-        onOpenExport={() => setExportModalOpen(true)}
         isFullscreen={isFullscreen}
         isIdle={isIdle}
         onToggleFullscreen={handleToggleFullscreen}

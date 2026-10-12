@@ -13,8 +13,7 @@ import {
   Play,
   ChevronUp,
   Maximize2,
-  Minimize2,
-  Download
+  Minimize2
 } from 'lucide-react';
 import { ViewMode, MaterialPreset, ClipAxis, CameraView, PivotMode, ExplodeDirection } from '../types/cad';
 
@@ -33,6 +32,7 @@ interface FloatingToolbarProps {
   onSetExplodeFactor: (factor: number) => void;
   explodeDirection?: ExplodeDirection;
   onSetExplodeDirection?: (dir: ExplodeDirection) => void;
+  partCount?: number;
   isMeasuring: boolean;
   onToggleMeasuring: () => void;
   onClearMeasure: () => void;
@@ -67,6 +67,7 @@ export const FloatingToolbar: React.FC<FloatingToolbarProps> = ({
   onSetExplodeFactor,
   explodeDirection = 'radial',
   onSetExplodeDirection,
+  partCount = 0,
   isMeasuring,
   onToggleMeasuring,
   onClearMeasure,
@@ -278,7 +279,12 @@ export const FloatingToolbar: React.FC<FloatingToolbarProps> = ({
             <div className="w-[270px] space-y-3">
               <div>
                 <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2 flex items-center justify-between">
-                  <span>分解展開 (Explode)</span>
+                  <div className="flex items-center gap-1.5">
+                    <span>分解展開 (Explode)</span>
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-sky-500/20 text-sky-300 border border-sky-500/35 font-bold normal-case">
+                      {partCount} パーツ
+                    </span>
+                  </div>
                   <div className="flex items-center gap-1.5">
                     {explodeFactor > 0 && (
                       <button
@@ -306,6 +312,16 @@ export const FloatingToolbar: React.FC<FloatingToolbarProps> = ({
                   <span>組立 (0%)</span>
                   <span>最大展開 (200%)</span>
                 </div>
+
+                {partCount <= 1 ? (
+                  <p className="text-[10px] text-amber-400/90 bg-amber-500/10 border border-amber-500/20 rounded-md p-1.5 mt-2 leading-relaxed">
+                    ⚠️ このモデルは単一パーツ（1点）で構成されているため、分離する部位がありません。
+                  </p>
+                ) : (
+                  <p className="text-[10px] text-slate-400 mt-1.5">
+                    全 <strong className="text-sky-300 font-bold">{partCount}</strong> 個のパーツを各部位の方向へ展開
+                  </p>
+                )}
               </div>
 
               {/* Explode Direction Selector */}
@@ -537,18 +553,6 @@ export const FloatingToolbar: React.FC<FloatingToolbarProps> = ({
           <Video className="w-4 h-4 text-rose-400" />
           <span className="hidden sm:inline">動画(MP4)</span>
         </button>
-
-        {/* 3D Format Conversion & Export Button */}
-        {onOpenExport && (
-          <button
-            onClick={onOpenExport}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/35 hover:border-emerald-500/60 transition-all cursor-pointer shadow-sm"
-            title="非圧縮GLB・STL・OBJ・単体HTML等に変換してエクスポート"
-          >
-            <Download className="w-4 h-4 text-emerald-400" />
-            <span className="hidden sm:inline">変換・保存</span>
-          </button>
-        )}
 
         {/* Pivot reset button */}
         <button

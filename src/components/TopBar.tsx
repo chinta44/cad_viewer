@@ -7,7 +7,6 @@ import {
   Sparkles,
   GitCompare,
   RotateCcw,
-  Video,
   Download
 } from 'lucide-react';
 import { ModelMetadata } from '../types/cad';
@@ -19,7 +18,6 @@ interface TopBarProps {
   onOpenCompare: () => void;
   onOpenSample: () => void;
   onScreenshot: () => void;
-  onOpenVideoExport?: () => void;
   onOpenExport?: () => void;
   isFullscreen?: boolean;
   onToggleFullscreen?: () => void;
@@ -34,7 +32,6 @@ export const TopBar: React.FC<TopBarProps> = ({
   onOpenCompare,
   onOpenSample,
   onScreenshot,
-  onOpenVideoExport,
   onOpenExport,
   isFullscreen = false,
   onToggleFullscreen,
@@ -130,17 +127,6 @@ export const TopBar: React.FC<TopBarProps> = ({
         >
           <Camera className="w-4 h-4" />
         </button>
-
-        {onOpenVideoExport && (
-          <button
-            onClick={onOpenVideoExport}
-            className="flex items-center gap-1 px-2 py-1.5 text-xs text-rose-300 hover:text-white bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 rounded-lg transition-colors cursor-pointer"
-            title="360° 自動回転動画を録画・保存 (MP4)"
-          >
-            <Video className="w-4 h-4 text-rose-400" />
-            <span className="hidden md:inline font-semibold">360°動画</span>
-          </button>
-        )}
 
         {onOpenExport && (
           <button
