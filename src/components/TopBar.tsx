@@ -2,8 +2,6 @@ import React from 'react';
 import {
   FolderOpen,
   Camera,
-  Maximize2,
-  Minimize2,
   Box,
   Layers,
   Sparkles,
@@ -24,7 +22,7 @@ interface TopBarProps {
   onOpenVideoExport?: () => void;
   onOpenExport?: () => void;
   isFullscreen?: boolean;
-  onToggleFullscreen: () => void;
+  onToggleFullscreen?: () => void;
   onResetView: () => void;
   inspectorOpen: boolean;
   onToggleInspector: () => void;
@@ -45,16 +43,16 @@ export const TopBar: React.FC<TopBarProps> = ({
   onToggleInspector,
 }) => {
   return (
-    <header className="fixed top-0 left-0 right-0 h-14 bg-slate-950/85 backdrop-blur-xl border-b border-slate-800/80 z-30 px-4 flex items-center justify-between gap-4 text-slate-100 select-none">
+    <header className="fixed top-0 left-0 right-0 h-14 bg-slate-950/85 backdrop-blur-xl border-b border-slate-800/80 z-30 px-2.5 sm:px-4 flex items-center justify-between gap-2 sm:gap-4 text-slate-100 select-none">
       {/* Zone 1: Brand & Version */}
-      <div className="flex items-center gap-3 shrink-0">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-sky-400 to-blue-600 flex items-center justify-center text-white shadow-lg shadow-sky-500/20">
-            <Box className="w-4 h-4" />
+      <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-gradient-to-br from-sky-400 to-blue-600 flex items-center justify-center text-white shadow-lg shadow-sky-500/20 shrink-0">
+            <Box className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </div>
-          <span className="text-base font-bold tracking-tight text-white flex items-baseline gap-1.5">
-            CADStudio 3D
-            <span className="text-[11px] font-mono font-medium text-sky-400/90 tracking-normal">
+          <span className="text-sm sm:text-base font-bold tracking-tight text-white flex items-baseline gap-1 sm:gap-1.5 whitespace-nowrap">
+            CADStudio<span className="hidden xs:inline"> 3D</span>
+            <span className="text-[10px] sm:text-[11px] font-mono font-medium text-sky-400/90 tracking-normal hidden sm:inline">
               v2.1.0
             </span>
           </span>
@@ -87,7 +85,7 @@ export const TopBar: React.FC<TopBarProps> = ({
       </div>
 
       {/* Zone 3: Actions */}
-      <div className="flex items-center gap-1.5 shrink-0">
+      <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
         <button
           onClick={onOpenFile}
           className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-sky-500 hover:bg-sky-400 active:bg-sky-600 rounded-lg shadow-sm shadow-sky-500/30 transition-colors whitespace-nowrap cursor-pointer"
@@ -155,28 +153,17 @@ export const TopBar: React.FC<TopBarProps> = ({
           </button>
         )}
 
-        <button
-          onClick={onToggleFullscreen}
-          className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
-            isFullscreen
-              ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40'
-              : 'text-slate-400 hover:text-white hover:bg-slate-800'
-          }`}
-          title={isFullscreen ? '全画面表示を終了 (Esc / F)' : 'モデルを全画面表示 (F)'}
-        >
-          {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-        </button>
-
+        {/* Inspector Button (Always visible on the right, fully tappable on mobile) */}
         <button
           onClick={onToggleInspector}
-          className={`flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-lg border transition-colors cursor-pointer ml-1 ${
+          className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold rounded-lg border transition-colors cursor-pointer shrink-0 ml-0.5 ${
             inspectorOpen
-              ? 'bg-sky-500/15 border-sky-500/40 text-sky-300'
-              : 'bg-slate-800/80 border-slate-700/60 text-slate-300 hover:bg-slate-700 hover:text-white'
+              ? 'bg-sky-500/20 border-sky-500/60 text-sky-200 shadow-sm'
+              : 'bg-slate-800/90 border-slate-700/70 text-slate-300 hover:bg-slate-700 hover:text-white'
           }`}
           title="パーツ階層ツリー & 物性計算パネルの表示切替"
         >
-          <Layers className="w-3.5 h-3.5" />
+          <Layers className="w-3.5 h-3.5 text-sky-400" />
           <span className="hidden sm:inline">インスペクター</span>
         </button>
       </div>
