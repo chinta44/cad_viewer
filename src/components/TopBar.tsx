@@ -7,7 +7,8 @@ import {
   Sparkles,
   GitCompare,
   RotateCcw,
-  Download
+  Download,
+  Smartphone
 } from 'lucide-react';
 import { ModelMetadata } from '../types/cad';
 import { formatMm } from '../utils/cadMath';
@@ -19,6 +20,7 @@ interface TopBarProps {
   onOpenSample: () => void;
   onScreenshot: () => void;
   onOpenExport?: () => void;
+  onOpenAndroidGuide?: () => void;
   isFullscreen?: boolean;
   onToggleFullscreen?: () => void;
   onResetView: () => void;
@@ -33,6 +35,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   onOpenSample,
   onScreenshot,
   onOpenExport,
+  onOpenAndroidGuide,
   isFullscreen = false,
   onToggleFullscreen,
   onResetView,
@@ -136,6 +139,17 @@ export const TopBar: React.FC<TopBarProps> = ({
           >
             <Download className="w-4 h-4 text-emerald-400" />
             <span className="hidden sm:inline">変換・保存</span>
+          </button>
+        )}
+
+        {onOpenAndroidGuide && (
+          <button
+            onClick={onOpenAndroidGuide}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-sky-300 hover:text-white bg-sky-500/15 hover:bg-sky-500/25 border border-sky-500/35 rounded-lg transition-colors cursor-pointer shadow-sm"
+            title="Android端末でのファイル関連付け（タップして起動）＆インストール案内"
+          >
+            <Smartphone className="w-4 h-4 text-sky-400" />
+            <span className="hidden md:inline">スマホ関連付け</span>
           </button>
         )}
 

@@ -21,6 +21,7 @@ import { OrientationGizmo } from './components/OrientationGizmo';
 import { SampleModelModal } from './components/SampleModelModal';
 import { VideoExportModal } from './components/VideoExportModal';
 import { ExportModal } from './components/ExportModal';
+import { AndroidInstallModal } from './components/AndroidInstallModal';
 import { UploadCloud, CheckCircle2, AlertCircle, Loader2, Minimize2 } from 'lucide-react';
 
 export default function App() {
@@ -54,6 +55,9 @@ export default function App() {
 
   // 3D Format Export & Conversion state
   const [exportModalOpen, setExportModalOpen] = useState(false);
+
+  // Android & PWA file association guide state
+  const [androidModalOpen, setAndroidModalOpen] = useState(false);
 
   // Section clipping
   const [clipAxis, setClipAxis] = useState<ClipAxis>('off');
@@ -321,6 +325,54 @@ export default function App() {
     setParts(built);
     updateMetadataFromParts(built, '平歯車 & 駆動シャフト (サンプル)', 'CAD Solid Mesh', 245000);
   }, [buildPartsFromRaw, updateMetadataFromParts]);
+
+  // -------------------------------------------------------------
+  // FILE HANDLING API (ANDROID & OS FILE ASSOCIATION & SHARE)
+  // -------------------------------------------------------------
+  useEffect(() => {
+    // 1. File Handling API (PWA WebAPK on Android & Desktop file association)
+    if ('launchQueue' in window && (window as any).launchQueue) {
+      (window as any).launchQueue.setConsumer(async (launchParams: any) => {
+        if (!launchParams.files || launchParams.files.length === 0) return;
+        try {
+          const fileHandle = launchParams.files[0];
+          const file = await fileHandle.getFile();
+          if (file) {
+            handleLoadFile(file, false);
+            showToast(`端末からファイルを開きました: ${file.name}`);
+          }
+        } catch (err: any) {
+          console.error('LaunchQueue file read error:', err);
+          showToast(`ファイルの起動時読み込みに失敗しました: ${err?.message || ''}`, 'error');
+        }
+      });
+    }
+
+    // 2. Web Share Target (Android file share receiver)
+    if (window.location.search.includes('shared=1') && 'caches' in window) {
+      (async () => {
+        try {
+          const cache = await caches.open('cadstudio-shared-cache');
+          const matched = await cache.match('/shared-model-data');
+          if (matched) {
+            const blob = await matched.blob();
+            const fileName = decodeURIComponent(
+              matched.headers.get('x-shared-name') || 'shared_model.glb'
+            );
+            const mimeType = matched.headers.get('content-type') || 'application/octet-stream';
+            const file = new File([blob], fileName, { type: mimeType });
+            await cache.delete('/shared-model-data');
+            // Clean URL query param without full page reload
+            window.history.replaceState({}, document.title, window.location.pathname);
+            handleLoadFile(file, false);
+            showToast(`共有されたファイルを開きました: ${fileName}`);
+          }
+        } catch (e) {
+          console.error('Shared cache load error:', e);
+        }
+      })();
+    }
+  }, [handleLoadFile, showToast]);
 
   // Load sample model from modal
   const handleSelectSample = (type: 'gear' | 'bearing' | 'bracket') => {
@@ -616,6 +668,7 @@ export default function App() {
           onOpenSample={() => setSampleModalOpen(true)}
           onScreenshot={() => screenshotRef.current?.()}
           onOpenExport={() => setExportModalOpen(true)}
+          onOpenAndroidGuide={() => setAndroidModalOpen(true)}
           isFullscreen={isFullscreen}
           onToggleFullscreen={handleToggleFullscreen}
           onResetView={() => resetCameraRef.current?.()}
@@ -817,6 +870,12 @@ export default function App() {
         metadata={metadata}
         selectedPartId={selectedPartId}
         onToast={showToast}
+      />
+
+      {/* Android & PWA File Association Setup Guide Modal */}
+      <AndroidInstallModal
+        isOpen={androidModalOpen}
+        onClose={() => setAndroidModalOpen(false)}
       />
 
       {/* Loading Overlay */}
